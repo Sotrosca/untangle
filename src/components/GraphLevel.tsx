@@ -10,13 +10,48 @@ import {
 import {
     Gesture,
     GestureDetector,
-    GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Svg, { Circle, Line } from "react-native-svg";
 import { doIntersect, Point } from "../utils/geometry";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NODE_RADIUS = 20;
+
+interface Point {
+    x: number;
+    y: number;
+}
+
+interface NodeProps {
+    id: number;
+    x: number;
+    y: number;
+    onDrag: (id: number, dx: number, dy: number) => void;
+}
+
+const Node: React.FC<NodeProps> = ({ id, x, y, onDrag }) => {
+    const pan = Gesture.Pan()
+        .runOnJS(true)
+        .activeOffsetX(0)
+        .activeOffsetY(0)
+        .onChange((e) => {
+            onDrag(id, e.changeX, e.changeY);
+        });
+
+    return (
+        <GestureDetector gesture={pan}>
+            <View
+                style={[
+                    styles.node,
+                    {
+                        left: x - NODE_RADIUS,
+                        top: y - NODE_RADIUS,
+                    },
+                ]}
+            />
+        </GestureDetector>
+    );
+};
 
 interface GraphLevelProps {
     levelData: {
@@ -43,7 +78,6 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
             initialNodes[node.id] = { x: node.x, y: node.y };
         });
         setNodes(initialNodes);
-        // Initial check
         checkIntersections(initialNodes);
     }, [levelData]);
 
@@ -62,7 +96,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
                 const p3 = currentNodes[edge2.source];
                 const p4 = currentNodes[edge2.target];
 
-                if (doIntersect(p1, p2, p3, p4)) {
+                if (p1 && p2 && p3 && p4 && doIntersect(p1, p2, p3, p4)) {
                     newIntersectingEdges.add(i);
                     newIntersectingEdges.add(j);
                 }
@@ -71,86 +105,33 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
 
         setIntersectingEdges(newIntersectingEdges);
 
-        if (newIntersectingEdges.size === 0) {
+        if (newIntersectingEdges.size === 0 && Object.keys(currentNodes).length > 0) {
             setIsLevelComplete(true);
         } else {
             setIsLevelComplete(false);
         }
     };
 
-    const handleNodeDrag = (
-        id: number,
-        translationX: number,
-        translationY: number
-    ) => {
-        setNodes((prevNodes) => {
-            const newNodes = {
-                ...prevNodes,
+    const handleNodeDrag = (id: number, dx: number, dy: number) => {
+        setNodes((prev) => {
+            const next = {
+                ...prev,
                 [id]: {
-                    x: Math.max(
-                        NODE_RADIUS,
-                        Math.min(
-                            SCREEN_WIDTH - NODE_RADIUS,
-                            prevNodes[id].x + translationX
-                        )
-                    ),
-                    y: Math.max(
-                        NODE_RADIUS,
-                        Math.min(
-                            SCREEN_HEIGHT - NODE_RADIUS,
-                            prevNodes[id].y + translationY
-                        )
-                    ),
+                    x: prev[id].x + dx,
+                    y: prev[id].y + dy,
                 },
             };
-            // We need to check intersections on every frame/update for visual feedback
-            // For better performance, we could debounce this or use runOnJS with Reanimated
-            checkIntersections(newNodes);
-            return newNodes;
+            checkIntersections(next);
+            return next;
         });
-    };
-
-    // We need a way to track the start position for the gesture
-    // Since we are using functional updates, we can just use the delta
-    // But Gesture.Pan().onChange gives delta.
-
-    // Helper to create a gesture for a node
-    const Node = ({ id, x, y }: { id: number; x: number; y: number }) => {
-        const pan = Gesture.Pan().onUpdate((e) => {
-            // This is a bit heavy for the JS thread, but for < 20 nodes it's fine.
-            // In a real production app with many nodes, we would use Reanimated SharedValues.
-            // Here we update state directly to trigger re-render of lines.
-            setNodes((prev) => {
-                const next = { ...prev };
-                next[id] = {
-                    x: prev[id].x + e.changeX,
-                    y: prev[id].y + e.changeY,
-                };
-                checkIntersections(next);
-                return next;
-            });
-        });
-
-        return (
-            <GestureDetector gesture={pan}>
-                <Circle
-                    cx={x}
-                    cy={y}
-                    r={NODE_RADIUS}
-                    fill="#3498db"
-                    stroke="#2980b9"
-                    strokeWidth={2}
-                />
-            </GestureDetector>
-        );
     };
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Level {levelData.id}</Text>
-            <GestureHandlerRootView style={styles.graphContainer}>
-                <Svg height="100%" width="100%">
-                    {/* Render Edges */}
+            <View style={styles.graphContainer}>
+                {/* Svg only for lines */}
+                <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
                     {levelData.edges.map((edge, index) => {
                         const start = nodes[edge.source];
                         const end = nodes[edge.target];
@@ -164,23 +145,24 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
                                 y1={start.y}
                                 x2={end.x}
                                 y2={end.y}
-                                stroke={isIntersecting ? "#e74c3c" : "#2ecc71"} // Red if intersecting, Green if clean
+                                stroke={isIntersecting ? "#e74c3c" : "#2ecc71"}
                                 strokeWidth={3}
                             />
                         );
                     })}
-
-                    {/* Render Nodes */}
-                    {Object.entries(nodes).map(([id, point]) => (
-                        <Node
-                            key={id}
-                            id={parseInt(id)}
-                            x={point.x}
-                            y={point.y}
-                        />
-                    ))}
                 </Svg>
-            </GestureHandlerRootView>
+
+                {/* Nodes as interactive Views */}
+                {Object.entries(nodes).map(([id, point]) => (
+                    <Node
+                        key={id}
+                        id={parseInt(id)}
+                        x={point.x}
+                        y={point.y}
+                        onDrag={handleNodeDrag}
+                    />
+                ))}
+            </View>
 
             {/* Level Clear Modal */}
             <Modal visible={isLevelComplete} transparent animationType="slide">
@@ -214,6 +196,18 @@ const styles = StyleSheet.create({
     },
     graphContainer: {
         flex: 1,
+        position: "relative",
+    },
+    node: {
+        position: "absolute",
+        width: NODE_RADIUS * 2,
+        height: NODE_RADIUS * 2,
+        borderRadius: NODE_RADIUS,
+        backgroundColor: "#3498db",
+        borderWidth: 2,
+        borderColor: "#2980b9",
+        zIndex: 10,
+        elevation: 10,
     },
     modalContainer: {
         flex: 1,

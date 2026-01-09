@@ -1,5 +1,7 @@
+import "react-native-gesture-handler";
 import { useState } from "react";
 import { Alert, SafeAreaView, StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
 
@@ -19,13 +21,15 @@ export default function App() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <GraphLevel
-                key={currentLevelIndex} // Force re-render on level change to reset state
-                levelData={levels[currentLevelIndex]}
-                onNextLevel={handleNextLevel}
-            />
-        </SafeAreaView>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <SafeAreaView style={styles.container}>
+                <GraphLevel
+                    key={currentLevelIndex} // Force re-render on level change to reset state
+                    levelData={levels[currentLevelIndex]}
+                    onNextLevel={handleNextLevel}
+                />
+            </SafeAreaView>
+        </GestureHandlerRootView>
     );
 }
 
