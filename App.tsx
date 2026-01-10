@@ -9,6 +9,9 @@ import { generateLevel, LevelData } from "./src/utils/levelGenerator";
 const { width, height } = Dimensions.get("window");
 
 export default function App() {
+    const [isInMenu, setIsInMenu] = useState(true);
+    const [hapticsEnabled, setHapticsEnabled] = useState(true);
+    const [soundEnabled, setSoundEnabled] = useState(true);
     const [levelIndex, setLevelIndex] = useState(0);
     const [currentLevelData, setCurrentLevelData] = useState<LevelData>(levels[0]);
     const [totalScore, setTotalScore] = useState(0);
@@ -42,6 +45,39 @@ export default function App() {
         }
     };
 
+    if (isInMenu) {
+        return (
+            <SafeAreaView style={styles.menuContainer}>
+                <Text style={styles.menuTitle}>Untangle</Text>
+                
+                <TouchableOpacity 
+                    style={styles.menuButton} 
+                    onPress={() => setIsInMenu(false)}
+                >
+                    <Text style={styles.menuButtonText}>Start Game</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[styles.menuButton, styles.settingsButton]} 
+                    onPress={() => setHapticsEnabled(!hapticsEnabled)}
+                >
+                    <Text style={styles.menuButtonText}>
+                        Vibration: {hapticsEnabled ? "ON" : "OFF"}
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[styles.menuButton, styles.settingsButton]} 
+                    onPress={() => setSoundEnabled(!soundEnabled)}
+                >
+                    <Text style={styles.menuButtonText}>
+                        Sound: {soundEnabled ? "ON" : "OFF"}
+                    </Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <SafeAreaView style={styles.container}>
@@ -54,6 +90,8 @@ export default function App() {
                     key={levelIndex} // Force re-render on level change
                     levelData={currentLevelData}
                     totalScore={totalScore}
+                    hapticsEnabled={hapticsEnabled}
+                    soundEnabled={soundEnabled}
                     onNextLevel={handleNextLevel}
                 />
             </SafeAreaView>
@@ -77,5 +115,35 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#7f8c8d'
+    },
+    menuContainer: {
+        flex: 1,
+        backgroundColor: "#ecf0f1",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    menuTitle: {
+        fontSize: 48,
+        fontWeight: "bold",
+        color: "#2c3e50",
+        marginBottom: 60,
+    },
+    menuButton: {
+        backgroundColor: "#27ae60",
+        paddingHorizontal: 40,
+        paddingVertical: 15,
+        borderRadius: 30,
+        marginBottom: 20,
+        elevation: 5,
+        minWidth: 200,
+        alignItems: "center",
+    },
+    settingsButton: {
+        backgroundColor: "#3498db",
+    },
+    menuButtonText: {
+        color: "white",
+        fontSize: 20,
+        fontWeight: "bold",
     }
 });

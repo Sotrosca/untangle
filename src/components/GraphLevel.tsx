@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
     Dimensions,
     Modal,
@@ -12,6 +12,8 @@ import {
     GestureDetector,
 } from "react-native-gesture-handler";
 import Svg, { Circle, Line } from "react-native-svg";
+import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 import { doIntersect, Point } from "../utils/geometry";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -123,10 +125,12 @@ interface GraphLevelProps {
         edges: { source: number; target: number }[];
     };
     totalScore: number;
+    hapticsEnabled: boolean;
+    soundEnabled: boolean;
     onNextLevel: (score: number) => void;
 }
 
-const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLevel }) => {
+const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, hapticsEnabled, soundEnabled, onNextLevel }) => {
     // State to hold current positions of nodes and which edges are intersecting
     const [gameState, setGameState] = useState<{
         nodes: { [key: number]: Point };
@@ -144,6 +148,54 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLe
     const [seconds, setSeconds] = useState(0);
     const [stars, setStars] = useState(0);
     const [levelScore, setLevelScore] = useState(0);
+
+    // Audio Refs
+    const pickSound = useRef<Audio.Sound | null>(null);
+    const dropSound = useRef<Audio.Sound | null>(null);
+    const dragSound = useRef<Audio.Sound | null>(null);
+
+    // Load Sounds
+    useEffect(() => {
+        if (!soundEnabled) return;
+
+        const loadSounds = async () => {
+            try {
+                // We use require for local assets.
+                // NOTE: User must provide these files in assets/sounds/
+                // If files are missing, this might throw, so we catch.
+                
+                // Pick
+                const { sound: s1 } = await Audio.Sound.createAsync(
+                    require("../../assets/sounds/pick.wav") 
+                );
+                pickSound.current = s1;
+
+                // Drop
+                const { sound: s2 } = await Audio.Sound.createAsync(
+                    require("../../assets/sounds/drop.wav")
+                );
+                dropSound.current = s2;
+
+                // Drag (Looping) - Disabled for now
+                // const { sound: s3 } = await Audio.Sound.createAsync(
+                //    require("../../assets/sounds/drag.wav")
+                // );
+                // dragSound.current = s3;
+                // await s3.setIsLoopingAsync(true);
+            } catch (e) {
+                console.log("Error loading sounds. Make sure files exist in assets/sounds/", e);
+            }
+        };
+
+        loadSounds();
+
+        return () => {
+            // Unload on unmount
+            pickSound.current?.unloadAsync();
+            dropSound.current?.unloadAsync();
+            dragSound.current?.unloadAsync();
+        };
+    }, [soundEnabled]);
 
     // Timer
     useEffect(() => {
@@ -256,6 +308,14 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLe
             };
             const nextIntersections = calculateIntersections(nextNodes, levelData.edges);
             
+            // Haptic feedback when intersection count changes
+            if (hapticsEnabled) {
+                if (nextIntersections.size < prev.intersectingEdges.size) {
+                    // Improved state (less red lines)
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+            }
+
             return {
                 nodes: nextNodes,
                 intersectingEdges: nextIntersections,
@@ -266,6 +326,11 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLe
     useEffect(() => {
         // If the user stops dragging and the graph is clean, complete the level
         if (!isDragging && gameState.intersectingEdges.size === 0 && Object.keys(gameState.nodes).length > 0) {
+            
+            // Success Haptics (Heavy)
+            if (hapticsEnabled) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
             
             // Calculate Stars based on moves (5 Star System)
             const nodeCount = levelData.nodes.length;
@@ -348,10 +413,23 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLe
                         x={point.x}
                         y={point.y}
                         onDrag={handleNodeDrag}
-                        onDragStart={() => setIsDragging(true)}
+                        onDragStart={() => {
+                            setIsDragging(true);
+                            if (hapticsEnabled) Haptics.selectionAsync();
+                            if (soundEnabled && pickSound.current) {
+                                pickSound.current.replayAsync();
+                                // dragSound.current?.playAsync(); // Start drag loop (Disabled)
+                            }
+                        }}
                         onDragEnd={() => {
                             setIsDragging(false);
                             setMoves(m => m + 1);
+                            if (hapticsEnabled) Haptics.selectionAsync();
+                            if (soundEnabled) {
+                                pickSound.current?.stopAsync(); // Stop pick if stil playing? Na, pick is short.
+                                // dragSound.current?.stopAsync(); // Stop drag loop (Disabled)
+                                if (dropSound.current) dropSound.current.replayAsync();
+                            }
                         }}
                     />
                 ))}
