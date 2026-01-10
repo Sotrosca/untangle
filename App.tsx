@@ -1,7 +1,8 @@
 import "react-native-gesture-handler";
-import { useState, useEffect } from "react";
-import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useState, useEffect, useRef } from "react";
+import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, AppState, AppStateStatus } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useAudioPlayer } from 'expo-audio';
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
 import { generateLevel, LevelData } from "./src/utils/levelGenerator";
@@ -15,6 +16,10 @@ export default function App() {
     const [levelIndex, setLevelIndex] = useState(0);
     const [currentLevelData, setCurrentLevelData] = useState<LevelData>(levels[0]);
     const [totalScore, setTotalScore] = useState(0);
+
+    // Expo Audio Players (New API)
+    const pickPlayer = useAudioPlayer(require("./assets/sounds/pick.wav"));
+    const dropPlayer = useAudioPlayer(require("./assets/sounds/drop.wav"));
 
     useEffect(() => {
         if (levelIndex < levels.length) {
@@ -92,6 +97,8 @@ export default function App() {
                     totalScore={totalScore}
                     hapticsEnabled={hapticsEnabled}
                     soundEnabled={soundEnabled}
+                    pickPlayer={pickPlayer}
+                    dropPlayer={dropPlayer}
                     onNextLevel={handleNextLevel}
                 />
             </SafeAreaView>

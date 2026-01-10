@@ -6,6 +6,8 @@ import {
     Text,
     TouchableOpacity,
     View,
+    AppState,
+    AppStateStatus,
 } from "react-native";
 import {
     Gesture,
@@ -13,7 +15,7 @@ import {
 } from "react-native-gesture-handler";
 import Svg, { Circle, Line } from "react-native-svg";
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
+import { AudioPlayer } from 'expo-audio';
 import { doIntersect, Point } from "../utils/geometry";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -127,10 +129,20 @@ interface GraphLevelProps {
     totalScore: number;
     hapticsEnabled: boolean;
     soundEnabled: boolean;
+    pickPlayer: AudioPlayer;
+    dropPlayer: AudioPlayer;
     onNextLevel: (score: number) => void;
 }
 
-const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, hapticsEnabled, soundEnabled, onNextLevel }) => {
+const GraphLevel: React.FC<GraphLevelProps> = ({ 
+    levelData, 
+    totalScore, 
+    hapticsEnabled, 
+    soundEnabled, 
+    pickPlayer,
+    dropPlayer,
+    onNextLevel 
+}) => {
     // State to hold current positions of nodes and which edges are intersecting
     const [gameState, setGameState] = useState<{
         nodes: { [key: number]: Point };
@@ -149,53 +161,23 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, hapticsE
     const [stars, setStars] = useState(0);
     const [levelScore, setLevelScore] = useState(0);
 
-    // Audio Refs
-    const pickSound = useRef<Audio.Sound | null>(null);
-    const dropSound = useRef<Audio.Sound | null>(null);
-    const dragSound = useRef<Audio.Sound | null>(null);
-
-    // Load Sounds
-    useEffect(() => {
+    // Safer playback helper
+    const playSound = (player: AudioPlayer) => {
         if (!soundEnabled) return;
-
-        const loadSounds = async () => {
-            try {
-                // We use require for local assets.
-                // NOTE: User must provide these files in assets/sounds/
-                // If files are missing, this might throw, so we catch.
-                
-                // Pick
-                const { sound: s1 } = await Audio.Sound.createAsync(
-                    require("../../assets/sounds/pick.wav") 
-                );
-                pickSound.current = s1;
-
-                // Drop
-                const { sound: s2 } = await Audio.Sound.createAsync(
-                    require("../../assets/sounds/drop.wav")
-                );
-                dropSound.current = s2;
-
-                // Drag (Looping) - Disabled for now
-                // const { sound: s3 } = await Audio.Sound.createAsync(
-                //    require("../../assets/sounds/drag.wav")
-                // );
-                // dragSound.current = s3;
-                // await s3.setIsLoopingAsync(true);
-            } catch (e) {
-                console.log("Error loading sounds. Make sure files exist in assets/sounds/", e);
+        try {
+            // Reset to clean state if possible (handling different potential API shapes)
+            if (typeof player.seekTo === 'function') {
+                player.seekTo(0);
+            } else if ('currentTime' in player) {
+               (player as any).currentTime = 0;
             }
-        };
+            
+            player.play();
+        } catch (error) {
+            console.log("Audio playback error", error);
+        }
+    };
 
-        loadSounds();
-
-        return () => {
-            // Unload on unmount
-            pickSound.current?.unloadAsync();
-            dropSound.current?.unloadAsync();
-            dragSound.current?.unloadAsync();
-        };
-    }, [soundEnabled]);
 
     // Timer
     useEffect(() => {
@@ -416,20 +398,13 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, hapticsE
                         onDragStart={() => {
                             setIsDragging(true);
                             if (hapticsEnabled) Haptics.selectionAsync();
-                            if (soundEnabled && pickSound.current) {
-                                pickSound.current.replayAsync();
-                                // dragSound.current?.playAsync(); // Start drag loop (Disabled)
-                            }
+                            playSound(pickSoundRef);
                         }}
                         onDragEnd={() => {
                             setIsDragging(false);
                             setMoves(m => m + 1);
                             if (hapticsEnabled) Haptics.selectionAsync();
-                            if (soundEnabled) {
-                                pickSound.current?.stopAsync(); // Stop pick if stil playing? Na, pick is short.
-                                // dragSound.current?.stopAsync(); // Stop drag loop (Disabled)
-                                if (dropSound.current) dropSound.current.replayAsync();
-                            }
+                            playSound(dropSoundRef);
                         }}
                     />
                 ))}
