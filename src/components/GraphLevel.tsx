@@ -1,23 +1,20 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
-    Dimensions,
     Modal,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
-    AppState,
-    AppStateStatus,
+    Platform,
+    Vibration,
 } from "react-native";
 import {
     Gesture,
     GestureDetector,
 } from "react-native-gesture-handler";
-import Svg, { Circle, Line } from "react-native-svg";
+import Svg, { Line } from "react-native-svg";
 import * as Haptics from 'expo-haptics';
 import { doIntersect, Point } from "../utils/geometry";
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NODE_RADIUS = 18; // El círculo visual un poco más pequeño
 const HIT_SLOP = 12;    // Área "invisible" extra para tocar
 
@@ -43,7 +40,7 @@ const Node: React.FC<NodeProps> = React.memo(({ id, x, y, onDrag, onDragStart, o
         .runOnJS(true)
         .activeOffsetX([-10, 10]) // Pequeño margen antes de iniciar el arrastre
         .activeOffsetY([-10, 10])
-        .onBegin(() => {
+        .onTouchesDown(() => {
             setIsActive(true);
             onDragStart();
         })
@@ -143,6 +140,20 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     playDrop,
     onNextLevel 
 }) => {
+    const playSound = useCallback((fn?: () => void) => {
+        if (soundEnabled) fn?.();
+    }, [soundEnabled]);
+
+    const hapticImpact = useCallback((style: Haptics.ImpactFeedbackStyle, androidMs: number) => {
+        if (!hapticsEnabled) return;
+        if (Platform.OS === 'android') {
+            Vibration.vibrate(androidMs);
+            return;
+        }
+        Haptics.impactAsync(style).catch(() => Vibration.vibrate(androidMs));
+    }, [hapticsEnabled]);
+
+    const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
     // State to hold current positions of nodes and which edges are intersecting
     const [gameState, setGameState] = useState<{
         nodes: { [key: number]: Point };
@@ -173,8 +184,10 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         return () => clearInterval(interval);
     }, [isLevelComplete]);
 
-    // Initialize nodes from level data with auto-scaling and centering
+    // Initialize nodes from level data with auto-scaling and centering once layout is known
     useEffect(() => {
+        if (!containerSize) return;
+
         const initialNodes: { [key: number]: Point } = {};
 
         // 1. Calculate bounding box of the original data
@@ -195,13 +208,10 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         const dataCenterX = (minX + maxX) / 2;
         const dataCenterY = (minY + maxY) / 2;
 
-        // 2. Determine available screen space
-        // Header space approximation (Title + Stats + AppHeader)
-        // Increasing this ensures the graph scales down enough to not touch the UI
-        const TOP_OFFSET = 200; 
+        // 2. Determine available graph space from measured container
         const PADDING = 40;
-        const availWidth = SCREEN_WIDTH - (PADDING * 2);
-        const availHeight = SCREEN_HEIGHT - TOP_OFFSET - (PADDING * 2);
+        const availWidth = containerSize.width - (PADDING * 2);
+        const availHeight = containerSize.height - (PADDING * 2);
 
         // 3. Calculate Scale Factor
         const scaleX = availWidth / dataWidth;
@@ -217,8 +227,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         // 4. Center logic
         // Center of the graph container area
         // We add specific vertical offset to push it slightly down from the very top edge
-        const screenCenterX = SCREEN_WIDTH / 2;
-        const screenCenterY = availHeight / 2 + 20; // +20 fudge factor to push down
+        const screenCenterX = containerSize.width / 2;
+        const screenCenterY = containerSize.height / 2;
 
         levelData.nodes.forEach((node) => {
             initialNodes[node.id] = { 
@@ -238,7 +248,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         setSeconds(0);
         setIsLevelComplete(false);
         setStars(0);
-    }, [levelData]);
+    }, [levelData, containerSize]);
 
     const calculateIntersections = (currentNodes: { [key: number]: Point }, edges: any[]) => {
         const intersectionSet = new Set<number>();
@@ -272,51 +282,33 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                 },
             };
             const nextIntersections = calculateIntersections(nextNodes, levelData.edges);
-            
-            // Haptic feedback when intersection count changes
-            if (hapticsEnabled) {
-                if (nextIntersections.size < prev.intersectingEdges.size) {
-                    // Improved state (less red lines)
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }
-            }
 
             return {
                 nodes: nextNodes,
                 intersectingEdges: nextIntersections,
             };
         });
-    }, [levelData, hapticsEnabled]);
+    }, [levelData]);
 
     const handleDragStart = useCallback(() => {
-        console.log('[GraphLevel] handleDragStart called, soundEnabled:', soundEnabled);
-        if (soundEnabled) {
-            console.log('[GraphLevel] Calling playPick()');
-            playPick();
-        }
+        playSound(playPick);
         setIsDragging(true);
-        if (hapticsEnabled) Haptics.selectionAsync();
-    }, [soundEnabled, hapticsEnabled, playPick]);
+        hapticImpact(Haptics.ImpactFeedbackStyle.Light, 60);
+    }, [playSound, hapticImpact]);
 
     const handleDragEnd = useCallback(() => {
-        console.log('[GraphLevel] handleDragEnd called, soundEnabled:', soundEnabled);
-        if (soundEnabled) {
-            console.log('[GraphLevel] Calling playDrop()');
-            playDrop();
-        }
+        playSound(playDrop);
         setIsDragging(false);
         setMoves(m => m + 1);
-        if (hapticsEnabled) Haptics.selectionAsync();
-    }, [soundEnabled, hapticsEnabled, playDrop]);
+        hapticImpact(Haptics.ImpactFeedbackStyle.Medium, 80);
+    }, [playSound, hapticImpact, playDrop]);
 
     useEffect(() => {
         // If the user stops dragging and the graph is clean, complete the level
         if (!isDragging && gameState.intersectingEdges.size === 0 && Object.keys(gameState.nodes).length > 0) {
             
             // Success Haptics (Heavy)
-            if (hapticsEnabled) {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
+            hapticImpact(Haptics.ImpactFeedbackStyle.Heavy, 120);
             
             // Calculate Stars based on moves (5 Star System)
             const nodeCount = levelData.nodes.length;
@@ -338,7 +330,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
             setLevelScore(finalScore);
             setIsLevelComplete(true);
         }
-    }, [isDragging, gameState.intersectingEdges]);
+    }, [isDragging, gameState.intersectingEdges, hapticImpact]);
 
     const renderEdges = () => {
         const cleanEdges: React.ReactNode[] = [];
@@ -385,7 +377,13 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                 <Text style={styles.statText}>Moves: {moves}</Text>
                 <Text style={styles.statText}>Time: {seconds}s</Text>
             </View>
-            <View style={styles.graphContainer}>
+            <View
+                style={styles.graphContainer}
+                onLayout={(e) => {
+                    const { width, height } = e.nativeEvent.layout;
+                    setContainerSize({ width, height });
+                }}
+            >
                 {/* Svg only for lines */}
                 <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
                     {renderEdges()}
