@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
     Dimensions,
     Modal,
@@ -15,7 +15,6 @@ import {
 } from "react-native-gesture-handler";
 import Svg, { Circle, Line } from "react-native-svg";
 import * as Haptics from 'expo-haptics';
-import { AudioPlayer } from 'expo-audio';
 import { doIntersect, Point } from "../utils/geometry";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -39,7 +38,8 @@ interface NodeProps {
 const Node: React.FC<NodeProps> = React.memo(({ id, x, y, onDrag, onDragStart, onDragEnd }) => {
     const [isActive, setIsActive] = useState(false);
 
-    const pan = Gesture.Pan()
+    // Optimized: using useMemo so the gesture handler doesn't get re-created on every render
+    const pan = useMemo(() => Gesture.Pan()
         .runOnJS(true)
         .activeOffsetX([-10, 10]) // Pequeño margen antes de iniciar el arrastre
         .activeOffsetY([-10, 10])
@@ -53,7 +53,7 @@ const Node: React.FC<NodeProps> = React.memo(({ id, x, y, onDrag, onDragStart, o
         .onFinalize(() => {
             setIsActive(false);
             onDragEnd();
-        });
+        }), [id, onDrag, onDragStart, onDragEnd]);
 
     const totalRadius = NODE_RADIUS + HIT_SLOP;
 
@@ -129,8 +129,8 @@ interface GraphLevelProps {
     totalScore: number;
     hapticsEnabled: boolean;
     soundEnabled: boolean;
-    pickPlayer: AudioPlayer;
-    dropPlayer: AudioPlayer;
+    playPick: () => void;
+    playDrop: () => void;
     onNextLevel: (score: number) => void;
 }
 
@@ -139,8 +139,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     totalScore, 
     hapticsEnabled, 
     soundEnabled, 
-    pickPlayer,
-    dropPlayer,
+    playPick,
+    playDrop,
     onNextLevel 
 }) => {
     // State to hold current positions of nodes and which edges are intersecting
@@ -160,23 +160,6 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     const [seconds, setSeconds] = useState(0);
     const [stars, setStars] = useState(0);
     const [levelScore, setLevelScore] = useState(0);
-
-    // Safer playback helper
-    const playSound = (player: AudioPlayer) => {
-        if (!soundEnabled) return;
-        try {
-            // Reset to clean state if possible (handling different potential API shapes)
-            if (typeof player.seekTo === 'function') {
-                player.seekTo(0);
-            } else if ('currentTime' in player) {
-               (player as any).currentTime = 0;
-            }
-            
-            player.play();
-        } catch (error) {
-            console.log("Audio playback error", error);
-        }
-    };
 
 
     // Timer
@@ -279,7 +262,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         return intersectionSet;
     };
 
-    const handleNodeDrag = (id: number, dx: number, dy: number) => {
+    const handleNodeDrag = useCallback((id: number, dx: number, dy: number) => {
         setGameState((prev) => {
             const nextNodes = {
                 ...prev.nodes,
@@ -303,7 +286,28 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                 intersectingEdges: nextIntersections,
             };
         });
-    };
+    }, [levelData, hapticsEnabled]);
+
+    const handleDragStart = useCallback(() => {
+        console.log('[GraphLevel] handleDragStart called, soundEnabled:', soundEnabled);
+        if (soundEnabled) {
+            console.log('[GraphLevel] Calling playPick()');
+            playPick();
+        }
+        setIsDragging(true);
+        if (hapticsEnabled) Haptics.selectionAsync();
+    }, [soundEnabled, hapticsEnabled, playPick]);
+
+    const handleDragEnd = useCallback(() => {
+        console.log('[GraphLevel] handleDragEnd called, soundEnabled:', soundEnabled);
+        if (soundEnabled) {
+            console.log('[GraphLevel] Calling playDrop()');
+            playDrop();
+        }
+        setIsDragging(false);
+        setMoves(m => m + 1);
+        if (hapticsEnabled) Haptics.selectionAsync();
+    }, [soundEnabled, hapticsEnabled, playDrop]);
 
     useEffect(() => {
         // If the user stops dragging and the graph is clean, complete the level
@@ -395,17 +399,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                         x={point.x}
                         y={point.y}
                         onDrag={handleNodeDrag}
-                        onDragStart={() => {
-                            setIsDragging(true);
-                            if (hapticsEnabled) Haptics.selectionAsync();
-                            playSound(pickSoundRef);
-                        }}
-                        onDragEnd={() => {
-                            setIsDragging(false);
-                            setMoves(m => m + 1);
-                            if (hapticsEnabled) Haptics.selectionAsync();
-                            playSound(dropSoundRef);
-                        }}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
                     />
                 ))}
             </View>

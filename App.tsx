@@ -2,10 +2,11 @@ import "react-native-gesture-handler";
 import { useState, useEffect, useRef } from "react";
 import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, AppState, AppStateStatus } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useAudioPlayer } from 'expo-audio';
+import { setAudioModeAsync } from 'expo-audio';
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
 import { generateLevel, LevelData } from "./src/utils/levelGenerator";
+import { useSoundPool } from "./src/hooks/useSoundPool";
 
 const { width, height } = Dimensions.get("window");
 
@@ -17,9 +18,17 @@ export default function App() {
     const [currentLevelData, setCurrentLevelData] = useState<LevelData>(levels[0]);
     const [totalScore, setTotalScore] = useState(0);
 
-    // Expo Audio Players (New API)
-    const pickPlayer = useAudioPlayer(require("./assets/sounds/pick.wav"));
-    const dropPlayer = useAudioPlayer(require("./assets/sounds/drop.wav"));
+    // Expo Audio Players (New API) with Pooling
+    const playPick = useSoundPool(require("./assets/sounds/pick.wav"), 'PICK');
+    const playDrop = useSoundPool(require("./assets/sounds/drop.wav"), 'DROP');
+
+    // Configure audio session on mount
+    useEffect(() => {
+        setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+        });
+    }, []);
 
     useEffect(() => {
         if (levelIndex < levels.length) {
@@ -97,8 +106,8 @@ export default function App() {
                     totalScore={totalScore}
                     hapticsEnabled={hapticsEnabled}
                     soundEnabled={soundEnabled}
-                    pickPlayer={pickPlayer}
-                    dropPlayer={dropPlayer}
+                    playPick={playPick}
+                    playDrop={playDrop}
                     onNextLevel={handleNextLevel}
                 />
             </SafeAreaView>
