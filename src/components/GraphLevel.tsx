@@ -138,11 +138,55 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
     const [isLevelComplete, setIsLevelComplete] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
 
-    // Initialize nodes from level data
+    // Initialize nodes from level data with auto-scaling and centering
     useEffect(() => {
         const initialNodes: { [key: number]: Point } = {};
+
+        // 1. Calculate bounding box of the original data
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        if (levelData.nodes.length > 0) {
+            levelData.nodes.forEach((n) => {
+                minX = Math.min(minX, n.x);
+                maxX = Math.max(maxX, n.x);
+                minY = Math.min(minY, n.y);
+                maxY = Math.max(maxY, n.y);
+            });
+        } else {
+             minX = 0; maxX = 100; minY = 0; maxY = 100;
+        }
+
+        const dataWidth = maxX - minX || 1;
+        const dataHeight = maxY - minY || 1;
+        const dataCenterX = (minX + maxX) / 2;
+        const dataCenterY = (minY + maxY) / 2;
+
+        // 2. Determine available screen space
+        // Subtract title space (~100px) and some padding (40px)
+        const TOP_OFFSET = 100; 
+        const PADDING = 40;
+        const availWidth = SCREEN_WIDTH - (PADDING * 2);
+        const availHeight = SCREEN_HEIGHT - TOP_OFFSET - (PADDING * 2);
+
+        // 3. Calculate Scale Factor
+        const scaleX = availWidth / dataWidth;
+        const scaleY = availHeight / dataHeight;
+        // Check nan
+        const safeScaleX = isFinite(scaleX) ? scaleX : 1;
+        const safeScaleY = isFinite(scaleY) ? scaleY : 1;
+        
+        // Use the smaller scale to fit both dimensions, cap at 1.5x to avoid getting too huge
+        const scale = Math.min(safeScaleX, safeScaleY, 1.8); 
+
+        // 4. Center logic
+        // Center of the graph container area
+        const screenCenterX = SCREEN_WIDTH / 2;
+        const screenCenterY = (availHeight / 2); // Relative to the container
+
         levelData.nodes.forEach((node) => {
-            initialNodes[node.id] = { x: node.x, y: node.y };
+            initialNodes[node.id] = { 
+                x: screenCenterX + (node.x - dataCenterX) * scale,
+                y: screenCenterY + (node.y - dataCenterY) * scale
+            };
         });
         
         const initialIntersections = calculateIntersections(initialNodes, levelData.edges);
