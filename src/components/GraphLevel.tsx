@@ -179,8 +179,9 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLe
         const dataCenterY = (minY + maxY) / 2;
 
         // 2. Determine available screen space
-        // Subtract title space (~100px) and some padding (40px)
-        const TOP_OFFSET = 100; 
+        // Header space approximation (Title + Stats + AppHeader)
+        // Increasing this ensures the graph scales down enough to not touch the UI
+        const TOP_OFFSET = 200; 
         const PADDING = 40;
         const availWidth = SCREEN_WIDTH - (PADDING * 2);
         const availHeight = SCREEN_HEIGHT - TOP_OFFSET - (PADDING * 2);
@@ -192,13 +193,15 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLe
         const safeScaleX = isFinite(scaleX) ? scaleX : 1;
         const safeScaleY = isFinite(scaleY) ? scaleY : 1;
         
-        // Use the smaller scale to fit both dimensions, cap at 1.5x to avoid getting too huge
-        const scale = Math.min(safeScaleX, safeScaleY, 1.8); 
+        // Use the smaller scale to fit both dimensions
+        // Cap at 1.6 to ensure it doesn't look ridiculously large on simple levels
+        const scale = Math.min(safeScaleX, safeScaleY, 1.6); 
 
         // 4. Center logic
         // Center of the graph container area
+        // We add specific vertical offset to push it slightly down from the very top edge
         const screenCenterX = SCREEN_WIDTH / 2;
-        const screenCenterY = (availHeight / 2); // Relative to the container
+        const screenCenterY = availHeight / 2 + 20; // +20 fudge factor to push down
 
         levelData.nodes.forEach((node) => {
             initialNodes[node.id] = { 
