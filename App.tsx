@@ -1,31 +1,55 @@
 import "react-native-gesture-handler";
-import { useState } from "react";
-import { Alert, SafeAreaView, StyleSheet } from "react-native";
+import { useState, useEffect } from "react";
+import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
+import { generateLevel, LevelData } from "./src/utils/levelGenerator";
+
+const { width, height } = Dimensions.get("window");
 
 export default function App() {
-    const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
+    const [levelIndex, setLevelIndex] = useState(0);
+    const [currentLevelData, setCurrentLevelData] = useState<LevelData>(levels[0]);
+
+    useEffect(() => {
+        if (levelIndex < levels.length) {
+            // Story Mode
+            setCurrentLevelData(levels[levelIndex]);
+        } else {
+            // Infinite Mode
+            const difficultyMultiplier = Math.floor((levelIndex - levels.length) / 2);
+            const baseNodes = 6;
+            const nodeCount = Math.min(baseNodes + difficultyMultiplier, 12); // Max 12 nodes prevents chaos
+            
+            const newLevel = generateLevel(levelIndex + 1, nodeCount, width, height);
+            setCurrentLevelData(newLevel);
+        }
+    }, [levelIndex]);
 
     const handleNextLevel = () => {
-        if (currentLevelIndex < levels.length - 1) {
-            setCurrentLevelIndex(currentLevelIndex + 1);
-        } else {
+        if (levelIndex === levels.length - 1) {
             Alert.alert(
-                "Congratulations!",
-                "You have completed all available levels.",
-                [{ text: "Restart", onPress: () => setCurrentLevelIndex(0) }]
+                "Story Complete!",
+                "You've finished the main levels. Entering Infinite Mode.",
+                [{ text: "Let's Go!", onPress: () => setLevelIndex(prev => prev + 1) }]
             );
+        } else {
+            setLevelIndex(prev => prev + 1);
         }
     };
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                     <Text style={styles.modeText}>
+                        {levelIndex < levels.length ? "Story Mode" : "Infinite Mode"}
+                     </Text>
+                </View>
                 <GraphLevel
-                    key={currentLevelIndex} // Force re-render on level change to reset state
-                    levelData={levels[currentLevelIndex]}
+                    key={levelIndex} // Force re-render on level change
+                    levelData={currentLevelData}
                     onNextLevel={handleNextLevel}
                 />
             </SafeAreaView>
@@ -36,6 +60,18 @@ export default function App() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#fff",
+        backgroundColor: "#ecf0f1",
     },
+    header: {
+        padding: 10,
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#ddd'
+    },
+    modeText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#7f8c8d'
+    }
 });
