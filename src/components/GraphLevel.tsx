@@ -137,6 +137,22 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
 
     const [isLevelComplete, setIsLevelComplete] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    
+    // Gamification State
+    const [moves, setMoves] = useState(0);
+    const [seconds, setSeconds] = useState(0);
+    const [stars, setStars] = useState(0);
+
+    // Timer
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (!isLevelComplete) {
+            interval = setInterval(() => {
+                setSeconds(s => s + 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isLevelComplete]);
 
     // Initialize nodes from level data with auto-scaling and centering
     useEffect(() => {
@@ -194,6 +210,12 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
             nodes: initialNodes,
             intersectingEdges: initialIntersections,
         });
+
+        // Reset Gamification Stats
+        setMoves(0);
+        setSeconds(0);
+        setIsLevelComplete(false);
+        setStars(0);
     }, [levelData]);
 
     const calculateIntersections = (currentNodes: { [key: number]: Point }, edges: any[]) => {
@@ -240,6 +262,13 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
         // If the user stops dragging and the graph is clean, complete the level
         if (!isDragging && gameState.intersectingEdges.size === 0 && Object.keys(gameState.nodes).length > 0) {
             setIsLevelComplete(true);
+            
+            // Calculate Stars based on moves
+            // Strict difficulty: 2 moves per node is Gold.
+            const nodeCount = levelData.nodes.length;
+            if (moves <= nodeCount * 2) setStars(3);
+            else if (moves <= nodeCount * 3) setStars(2);
+            else setStars(1);
         }
     }, [isDragging, gameState.intersectingEdges]);
 
@@ -281,6 +310,10 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Level {levelData.id}</Text>
+            <View style={styles.statsContainer}>
+                <Text style={styles.statText}>Moves: {moves}</Text>
+                <Text style={styles.statText}>Time: {seconds}s</Text>
+            </View>
             <View style={styles.graphContainer}>
                 {/* Svg only for lines */}
                 <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
@@ -296,7 +329,10 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
                         y={point.y}
                         onDrag={handleNodeDrag}
                         onDragStart={() => setIsDragging(true)}
-                        onDragEnd={() => setIsDragging(false)}
+                        onDragEnd={() => {
+                            setIsDragging(false);
+                            setMoves(m => m + 1);
+                        }}
                     />
                 ))}
             </View>
@@ -306,6 +342,10 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalText}>Level Clear!</Text>
+                        <Text style={styles.stars}>{"⭐".repeat(stars)}</Text>
+                        <Text style={styles.resultText}>Moves: {moves}</Text>
+                        <Text style={styles.resultText}>Time: {seconds}s</Text>
+                        
                         <TouchableOpacity
                             style={styles.button}
                             onPress={onNextLevel}>
@@ -328,8 +368,19 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: "bold",
         textAlign: "center",
-        marginBottom: 20,
+        marginBottom: 10,
         color: "#2c3e50",
+    },
+    statsContainer: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        marginBottom: 10,
+        paddingHorizontal: 20,
+    },
+    statText: {
+        fontSize: 16,
+        color: "#34495e",
+        fontWeight: "600",
     },
     graphContainer: {
         flex: 1,
@@ -362,7 +413,16 @@ const styles = StyleSheet.create({
         fontSize: 30,
         fontWeight: "bold",
         color: "#27ae60",
-        marginBottom: 20,
+        marginBottom: 10,
+    },
+    stars: {
+        fontSize: 40,
+        marginBottom: 10,
+    },
+    resultText: {
+        fontSize: 18,
+        color: "#2c3e50",
+        marginBottom: 5,
     },
     button: {
         backgroundColor: "#3498db",
