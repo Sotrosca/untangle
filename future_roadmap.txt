@@ -1,0 +1,14 @@
+1. Procedural Level Generator (Infinite Levels)
+   - Why: Manual level design is error-prone (proven by the Level 5 issue) and limited.
+   - Challenge: Implement an algorithm that generates random points and edges, ensuring the resulting graph is always planar (solvable) but starts in an entangled state.
+   - Goal: Make the game endless.
+
+2. Gamification (Moves & Time Tracking)
+   - Why: Adds replayability and challenge beyond just "clearing" the level.
+   - Challenge: Add a counter for "remaining intersections", a timer, and move tracking to award stars (1-3) upon completion.
+   - Goal: Add depth and player progression.
+
+3. Haptic Feedback & Sound (Game Juice)
+   - Why: Improves tactile feel and immersion.
+   - Challenge: Trigger haptic vibrations when dragging through lines or untangling nodes. Add satisfying "pop" or "click" sound effects on success.
+   - Goal: Improve User Experience (UX) and "feel".
