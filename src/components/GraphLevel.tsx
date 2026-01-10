@@ -122,10 +122,11 @@ interface GraphLevelProps {
         nodes: { id: number; x: number; y: number }[];
         edges: { source: number; target: number }[];
     };
-    onNextLevel: () => void;
+    totalScore: number;
+    onNextLevel: (score: number) => void;
 }
 
-const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
+const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, totalScore, onNextLevel }) => {
     // State to hold current positions of nodes and which edges are intersecting
     const [gameState, setGameState] = useState<{
         nodes: { [key: number]: Point };
@@ -142,6 +143,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
     const [moves, setMoves] = useState(0);
     const [seconds, setSeconds] = useState(0);
     const [stars, setStars] = useState(0);
+    const [levelScore, setLevelScore] = useState(0);
 
     // Timer
     useEffect(() => {
@@ -177,8 +179,9 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
         const dataCenterY = (minY + maxY) / 2;
 
         // 2. Determine available screen space
-        // Subtract title space (~100px) and some padding (40px)
-        const TOP_OFFSET = 100; 
+        // Header space approximation (Title + Stats + AppHeader)
+        // Increasing this ensures the graph scales down enough to not touch the UI
+        const TOP_OFFSET = 200; 
         const PADDING = 40;
         const availWidth = SCREEN_WIDTH - (PADDING * 2);
         const availHeight = SCREEN_HEIGHT - TOP_OFFSET - (PADDING * 2);
@@ -190,13 +193,15 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
         const safeScaleX = isFinite(scaleX) ? scaleX : 1;
         const safeScaleY = isFinite(scaleY) ? scaleY : 1;
         
-        // Use the smaller scale to fit both dimensions, cap at 1.5x to avoid getting too huge
-        const scale = Math.min(safeScaleX, safeScaleY, 1.8); 
+        // Use the smaller scale to fit both dimensions
+        // Cap at 1.6 to ensure it doesn't look ridiculously large on simple levels
+        const scale = Math.min(safeScaleX, safeScaleY, 1.6); 
 
         // 4. Center logic
         // Center of the graph container area
+        // We add specific vertical offset to push it slightly down from the very top edge
         const screenCenterX = SCREEN_WIDTH / 2;
-        const screenCenterY = (availHeight / 2); // Relative to the container
+        const screenCenterY = availHeight / 2 + 20; // +20 fudge factor to push down
 
         levelData.nodes.forEach((node) => {
             initialNodes[node.id] = { 
@@ -261,14 +266,26 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
     useEffect(() => {
         // If the user stops dragging and the graph is clean, complete the level
         if (!isDragging && gameState.intersectingEdges.size === 0 && Object.keys(gameState.nodes).length > 0) {
-            setIsLevelComplete(true);
             
-            // Calculate Stars based on moves
-            // Strict difficulty: 2 moves per node is Gold.
+            // Calculate Stars based on moves (5 Star System)
             const nodeCount = levelData.nodes.length;
-            if (moves <= nodeCount * 2) setStars(3);
-            else if (moves <= nodeCount * 3) setStars(2);
-            else setStars(1);
+            let calculatedStars = 1;
+            
+            if (moves <= nodeCount + 1) calculatedStars = 5;       // Perfect + 1 slip
+            else if (moves <= nodeCount * 1.5) calculatedStars = 4; // Great
+            else if (moves <= nodeCount * 2) calculatedStars = 3;   // Good
+            else if (moves <= nodeCount * 3) calculatedStars = 2;   // Okay
+            else calculatedStars = 1;                               // Struggled
+            
+            // Calculate Score based on Stars and Time
+            // Base Score from Stars + Time Efficiency Bonus
+            const baseScore = calculatedStars * 200; 
+            const timePenalty = Math.floor(seconds / 2); // Lose 1 point every 2 seconds
+            const finalScore = Math.max(50, baseScore - timePenalty); // Minimum 50 pts
+
+            setStars(calculatedStars);
+            setLevelScore(finalScore);
+            setIsLevelComplete(true);
         }
     }, [isDragging, gameState.intersectingEdges]);
 
@@ -309,7 +326,10 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Level {levelData.id}</Text>
+            <View style={styles.headerInfo}>
+                <Text style={styles.title}>Level {levelData.id}</Text>
+                <Text style={styles.totalScore}>Score: {totalScore}</Text>
+            </View>
             <View style={styles.statsContainer}>
                 <Text style={styles.statText}>Moves: {moves}</Text>
                 <Text style={styles.statText}>Time: {seconds}s</Text>
@@ -343,12 +363,13 @@ const GraphLevel: React.FC<GraphLevelProps> = ({ levelData, onNextLevel }) => {
                     <View style={styles.modalContent}>
                         <Text style={styles.modalText}>Level Clear!</Text>
                         <Text style={styles.stars}>{"⭐".repeat(stars)}</Text>
+                        <Text style={styles.resultText}>Score: +{levelScore}</Text>
                         <Text style={styles.resultText}>Moves: {moves}</Text>
                         <Text style={styles.resultText}>Time: {seconds}s</Text>
                         
                         <TouchableOpacity
                             style={styles.button}
-                            onPress={onNextLevel}>
+                            onPress={() => onNextLevel(levelScore)}>
                             <Text style={styles.buttonText}>Next Level</Text>
                         </TouchableOpacity>
                     </View>
@@ -362,20 +383,35 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#ecf0f1",
-        paddingTop: 50,
+        paddingTop: 10,
+    },
+    headerInfo: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        marginBottom: 5,
+    },
+    totalScore: {
+        fontSize: 20,
+        fontWeight: "bold",
+        color: "#f39c12", // Gold color for score
     },
     title: {
         fontSize: 24,
         fontWeight: "bold",
-        textAlign: "center",
-        marginBottom: 10,
         color: "#2c3e50",
     },
     statsContainer: {
         flexDirection: "row",
-        justifyContent: "space-around",
+        justifyContent: "space-between", // Spread out
         marginBottom: 10,
         paddingHorizontal: 20,
+        backgroundColor: "#fff",
+        paddingVertical: 8,
+        marginHorizontal: 20,
+        borderRadius: 10,
+        elevation: 2,
     },
     statText: {
         fontSize: 16,
