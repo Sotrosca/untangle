@@ -11,6 +11,7 @@ const { width, height } = Dimensions.get("window");
 export default function App() {
     const [levelIndex, setLevelIndex] = useState(0);
     const [currentLevelData, setCurrentLevelData] = useState<LevelData>(levels[0]);
+    const [totalScore, setTotalScore] = useState(0);
 
     useEffect(() => {
         if (levelIndex < levels.length) {
@@ -27,7 +28,9 @@ export default function App() {
         }
     }, [levelIndex]);
 
-    const handleNextLevel = () => {
+    const handleNextLevel = (scoreEarned: number) => {
+        setTotalScore(prev => prev + scoreEarned);
+
         if (levelIndex === levels.length - 1) {
             Alert.alert(
                 "Story Complete!",
@@ -50,6 +53,7 @@ export default function App() {
                 <GraphLevel
                     key={levelIndex} // Force re-render on level change
                     levelData={currentLevelData}
+                    totalScore={totalScore}
                     onNextLevel={handleNextLevel}
                 />
             </SafeAreaView>
@@ -67,7 +71,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#ddd'
+        borderBottomColor: '#ddd',
     },
     modeText: {
         fontSize: 16,
