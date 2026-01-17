@@ -19,15 +19,31 @@ export default function App() {
     const [totalScore, setTotalScore] = useState(0);
 
     // Expo Audio Players (New API) with Pooling
-    const playPick = useSoundPool(require("./assets/sounds/pick.wav"), 'PICK');
-    const playDrop = useSoundPool(require("./assets/sounds/drop.wav"), 'DROP');
+    const playPick = useSoundPool(
+        require("./assets/sounds/pick.wav"),
+        'PICK',
+        { volume: 0.7, rateRange: [0.98, 1.02] }
+    );
+    const playDrop = useSoundPool(
+        require("./assets/sounds/drop.wav"),
+        'DROP',
+        { volume: 0.7, rateRange: [0.95, 1.03] }
+    );
 
     // Configure audio session on mount
     useEffect(() => {
-        setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-        });
+        const configureAudio = async () => {
+            try {
+                await setAudioModeAsync({
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                });
+            } catch (err) {
+                console.warn("Audio mode setup failed", err);
+            }
+        };
+
+        configureAudio();
     }, []);
 
     useEffect(() => {
