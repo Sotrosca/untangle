@@ -15,13 +15,8 @@ import {
 import Svg, { Line } from "react-native-svg";
 import * as Haptics from 'expo-haptics';
 import { doIntersect, Point } from "../utils/geometry";
-const NODE_RADIUS = 18; // El círculo visual un poco más pequeño
-const HIT_SLOP = 12;    // Área "invisible" extra para tocar
-
-interface Point {
-    x: number;
-    y: number;
-}
+const NODE_RADIUS = 18; // Slightly smaller visual circle
+const HIT_SLOP = 12;    // Extra invisible touch area for input
 
 interface NodeProps {
     id: number;
@@ -38,7 +33,7 @@ const Node: React.FC<NodeProps> = React.memo(({ id, x, y, onDrag, onDragStart, o
     // Optimized: using useMemo so the gesture handler doesn't get re-created on every render
     const pan = useMemo(() => Gesture.Pan()
         .runOnJS(true)
-        .activeOffsetX([-10, 10]) // Pequeño margen antes de iniciar el arrastre
+        .activeOffsetX([-10, 10]) // Small drag threshold before activation
         .activeOffsetY([-10, 10])
         .onTouchesDown(() => {
             setIsActive(true);

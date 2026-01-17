@@ -97,7 +97,7 @@ export default function App() {
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
                      <Text style={styles.modeText}>
-                        {levelIndex < levels.length ? "Story Mode" : "Infinite Mode"}
+                                {levelIndex < levels.length ? "Story Mode" : "Infinite Mode"}
                      </Text>
                 </View>
                 <GraphLevel
