@@ -2,7 +2,7 @@ import "react-native-gesture-handler";
 import { useState, useEffect, useRef } from "react";
 import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, AppState, AppStateStatus } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { setAudioModeAsync } from 'expo-audio';
+import { Audio } from 'expo-av';
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
 import { generateLevel, LevelData } from "./src/utils/levelGenerator";
@@ -34,7 +34,7 @@ export default function App() {
     useEffect(() => {
         const configureAudio = async () => {
             try {
-                await setAudioModeAsync({
+                await Audio.setAudioModeAsync({
                     playsInSilentModeIOS: true,
                     staysActiveInBackground: false,
                 });
