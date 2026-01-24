@@ -4,3 +4,5 @@ build/
 .env 
 bin/ 
 .settings/ 
+android/
+.expo/
