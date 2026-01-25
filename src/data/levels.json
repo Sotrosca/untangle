@@ -12,7 +12,8 @@
             { "source": 1, "target": 3 },
             { "source": 0, "target": 1 },
             { "source": 2, "target": 3 }
-        ]
+        ],
+        "targetMoves": 5
     },
     {
         "id": 2,
@@ -29,7 +30,8 @@
             { "source": 1, "target": 3 },
             { "source": 1, "target": 4 },
             { "source": 2, "target": 4 }
-        ]
+        ],
+        "targetMoves": 6
     },
     {
         "id": 3,
@@ -55,7 +57,8 @@
             { "source": 4, "target": 6 },
             { "source": 5, "target": 1 },
             { "source": 6, "target": 2 }
-        ]
+        ],
+        "targetMoves": 8
     },
     {
         "id": 4,
@@ -76,7 +79,8 @@
             { "source": 5, "target": 3 },
             { "source": 0, "target": 3 },
             { "source": 1, "target": 4 }
-        ]
+        ],
+        "targetMoves": 7
     },
     {
         "id": 5,
@@ -97,6 +101,7 @@
             { "source": 2, "target": 4 },
             { "source": 3, "target": 0 },
             { "source": 4, "target": 1 }
-        ]
+        ],
+        "targetMoves": 6
     }
 ]

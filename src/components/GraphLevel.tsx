@@ -117,6 +117,7 @@ interface GraphLevelProps {
         id: number;
         nodes: { id: number; x: number; y: number }[];
         edges: { source: number; target: number }[];
+        targetMoves?: number;
     };
     totalScore: number;
     hapticsEnabled: boolean;
@@ -166,6 +167,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     const [seconds, setSeconds] = useState(0);
     const [stars, setStars] = useState(0);
     const [levelScore, setLevelScore] = useState(0);
+    const [scoreBreakdown, setScoreBreakdown] = useState<{ baseScore: number; timePenalty: number; movePenalty: number; finalScore: number } | null>(null);
 
 
     // Timer
@@ -299,6 +301,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     }, [playSound, hapticImpact, playDrop]);
 
     useEffect(() => {
+        if (isLevelComplete) return;
+
         // If the user stops dragging and the graph is clean, complete the level
         if (!isDragging && gameState.intersectingEdges.size === 0 && Object.keys(gameState.nodes).length > 0) {
             
@@ -319,13 +323,17 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
             // Base Score from Stars + Time Efficiency Bonus
             const baseScore = calculatedStars * 200; 
             const timePenalty = Math.floor(seconds / 2); // Lose 1 point every 2 seconds
-            const finalScore = Math.max(50, baseScore - timePenalty); // Minimum 50 pts
+            const targetMoves = levelData.targetMoves ?? (nodeCount + 1);
+            const excessMoves = Math.max(0, moves - targetMoves);
+            const movePenalty = excessMoves * 5; // Lose 5 points per move beyond target
+            const finalScore = Math.max(50, baseScore - timePenalty - movePenalty); // Minimum 50 pts
 
             setStars(calculatedStars);
             setLevelScore(finalScore);
+            setScoreBreakdown({ baseScore, timePenalty, movePenalty, finalScore });
             setIsLevelComplete(true);
         }
-    }, [isDragging, gameState.intersectingEdges, hapticImpact]);
+    }, [isDragging, gameState.intersectingEdges, gameState.nodes, hapticImpact, isLevelComplete, levelData.nodes.length, moves, seconds]);
 
     const renderEdges = () => {
         const cleanEdges: React.ReactNode[] = [];
@@ -369,7 +377,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                 <Text style={styles.totalScore}>Score: {totalScore}</Text>
             </View>
             <View style={styles.statsContainer}>
-                <Text style={styles.statText}>Moves: {moves}</Text>
+                <Text style={styles.statText}>Moves: {moves}/{levelData.targetMoves ?? (levelData.nodes.length + 1)}</Text>
                 <Text style={styles.statText}>Time: {seconds}s</Text>
             </View>
             <View
@@ -402,12 +410,46 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
             <Modal visible={isLevelComplete} transparent animationType="slide">
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalText}>Level Clear!</Text>
-                        <Text style={styles.stars}>{"⭐".repeat(stars)}</Text>
-                        <Text style={styles.resultText}>Score: +{levelScore}</Text>
-                        <Text style={styles.resultText}>Moves: {moves}</Text>
-                        <Text style={styles.resultText}>Time: {seconds}s</Text>
-                        
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Level Complete</Text>
+                            <Text style={styles.stars}>{"⭐".repeat(stars)}</Text>
+                        </View>
+
+                        <View style={styles.scoreBlock}>
+                            <Text style={styles.scoreLabel}>Score</Text>
+                            <Text style={styles.scoreValue}>{levelScore}</Text>
+                        </View>
+
+                        {scoreBreakdown && (
+                            <View style={styles.breakdownBlock}>
+                                <Text style={styles.sectionTitle}>Score Breakdown</Text>
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.rowLabel}>Stars</Text>
+                                    <Text style={styles.rowValue}>{stars} x 200 = {scoreBreakdown.baseScore}</Text>
+                                </View>
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.rowLabel}>Time penalty</Text>
+                                    <Text style={styles.rowValue}>-{scoreBreakdown.timePenalty}</Text>
+                                </View>
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.rowLabel}>Move penalty</Text>
+                                    <Text style={styles.rowValue}>-{scoreBreakdown.movePenalty}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        <View style={styles.metaBlock}>
+                                <Text style={styles.sectionTitle}>Performance</Text>
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.rowLabel}>Moves</Text>
+                                    <Text style={styles.rowValue}>{moves}/{levelData.targetMoves ?? (levelData.nodes.length + 1)}</Text>
+                                </View>
+                            <View style={styles.breakdownRow}>
+                                <Text style={styles.rowLabel}>Time</Text>
+                                <Text style={styles.rowValue}>{seconds}s</Text>
+                            </View>
+                        </View>
+
                         <TouchableOpacity
                             style={styles.button}
                             onPress={() => onNextLevel(levelScore)}>
@@ -481,31 +523,88 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         backgroundColor: "white",
-        padding: 30,
+        paddingVertical: 24,
+        paddingHorizontal: 22,
         borderRadius: 20,
-        alignItems: "center",
-        elevation: 5,
+        alignItems: "stretch",
+        elevation: 6,
+        width: "88%",
+        maxWidth: 420,
     },
-    modalText: {
-        fontSize: 30,
-        fontWeight: "bold",
+    modalHeader: {
+        alignItems: "center",
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontSize: 26,
+        fontWeight: "700",
         color: "#27ae60",
-        marginBottom: 10,
+        marginBottom: 6,
     },
     stars: {
-        fontSize: 40,
-        marginBottom: 10,
+        fontSize: 32,
     },
-    resultText: {
-        fontSize: 18,
+    scoreBlock: {
+        backgroundColor: "#f8f9fb",
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        alignItems: "center",
+        marginBottom: 16,
+    },
+    scoreLabel: {
+        fontSize: 14,
+        color: "#7f8c8d",
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginBottom: 4,
+    },
+    scoreValue: {
+        fontSize: 28,
+        fontWeight: "800",
         color: "#2c3e50",
-        marginBottom: 5,
+    },
+    breakdownBlock: {
+        borderTopWidth: 1,
+        borderTopColor: "#ecf0f1",
+        paddingTop: 12,
+        marginBottom: 12,
+    },
+    metaBlock: {
+        borderTopWidth: 1,
+        borderTopColor: "#ecf0f1",
+        paddingTop: 12,
+        marginBottom: 20,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: "#34495e",
+        marginBottom: 8,
+        textTransform: "uppercase",
+        letterSpacing: 0.8,
+    },
+    breakdownRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 4,
+    },
+    rowLabel: {
+        fontSize: 15,
+        color: "#7f8c8d",
+    },
+    rowValue: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#2c3e50",
     },
     button: {
         backgroundColor: "#3498db",
         paddingHorizontal: 20,
         paddingVertical: 10,
         borderRadius: 10,
+        alignItems: "center",
     },
     buttonText: {
         color: "white",

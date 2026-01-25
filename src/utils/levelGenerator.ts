@@ -4,6 +4,7 @@ export interface LevelData {
     id: number;
     nodes: { id: number; x: number; y: number }[];
     edges: { source: number; target: number }[];
+    targetMoves?: number;
 }
 
 /**
@@ -109,6 +110,7 @@ export const generateLevel = (id: number, nodeCount: number, width: number, heig
     return {
         id,
         nodes,
-        edges
+        edges,
+        targetMoves: nodeCount + 1,
     };
 };
