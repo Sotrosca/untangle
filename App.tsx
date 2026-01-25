@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, AppState, AppStateStatus } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Audio } from 'expo-av';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
 import { generateLevel, LevelData } from "./src/utils/levelGenerator";
@@ -17,6 +18,9 @@ export default function App() {
     const [levelIndex, setLevelIndex] = useState(0);
     const [currentLevelData, setCurrentLevelData] = useState<LevelData>(levels[0]);
     const [totalScore, setTotalScore] = useState(0);
+    const [isHydrated, setIsHydrated] = useState(false);
+
+    const STORAGE_KEY = "untangle_settings_v1";
 
     // Expo Audio Players (New API) with Pooling
     const playPick = useSoundPool(
@@ -45,6 +49,53 @@ export default function App() {
 
         configureAudio();
     }, []);
+
+    useEffect(() => {
+        const hydrate = async () => {
+            try {
+                const raw = await AsyncStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const data = JSON.parse(raw) as {
+                        hapticsEnabled?: boolean;
+                        soundEnabled?: boolean;
+                        levelIndex?: number;
+                        totalScore?: number;
+                    };
+
+                    if (typeof data.hapticsEnabled === "boolean") setHapticsEnabled(data.hapticsEnabled);
+                    if (typeof data.soundEnabled === "boolean") setSoundEnabled(data.soundEnabled);
+                    if (typeof data.levelIndex === "number" && data.levelIndex >= 0) setLevelIndex(data.levelIndex);
+                    if (typeof data.totalScore === "number" && data.totalScore >= 0) setTotalScore(data.totalScore);
+                }
+            } catch (err) {
+                console.warn("Failed to load saved settings", err);
+            } finally {
+                setIsHydrated(true);
+            }
+        };
+
+        hydrate();
+    }, []);
+
+    useEffect(() => {
+        if (!isHydrated) return;
+
+        const persist = async () => {
+            try {
+                const payload = {
+                    hapticsEnabled,
+                    soundEnabled,
+                    levelIndex,
+                    totalScore,
+                };
+                await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+            } catch (err) {
+                console.warn("Failed to save settings", err);
+            }
+        };
+
+        persist();
+    }, [hapticsEnabled, soundEnabled, levelIndex, totalScore, isHydrated]);
 
     useEffect(() => {
         if (levelIndex < levels.length) {
