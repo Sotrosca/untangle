@@ -99,13 +99,43 @@ export const generateLevel = (id: number, nodeCount: number, width: number, heig
         }
     }
 
+    const hasIntersection = (currentNodes: { id: number; x: number; y: number }[], currentEdges: { source: number; target: number }[]) => {
+        for (let i = 0; i < currentEdges.length; i++) {
+            for (let j = i + 1; j < currentEdges.length; j++) {
+                const edge1 = currentEdges[i];
+                const edge2 = currentEdges[j];
+
+                const p1 = currentNodes[edge1.source];
+                const p2 = currentNodes[edge1.target];
+                const p3 = currentNodes[edge2.source];
+                const p4 = currentNodes[edge2.target];
+
+                if (p1 && p2 && p3 && p4 && doIntersect(p1, p2, p3, p4)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
     // 4. Shuffle positions ("Entangle" the graph)
     // Place nodes randomly within the screen bounds with some padding
     const padding = 50;
-    nodes.forEach(node => {
-        node.x = padding + Math.random() * (width - 2 * padding);
-        node.y = padding + Math.random() * (height - 2 * padding);
-    });
+    const placeRandomPositions = () => {
+        nodes.forEach(node => {
+            node.x = padding + Math.random() * (width - 2 * padding);
+            node.y = padding + Math.random() * (height - 2 * padding);
+        });
+    };
+
+    const MAX_SHUFFLE_ATTEMPTS = 30;
+    let shuffleAttempts = 0;
+    let entangled = false;
+    while (shuffleAttempts < MAX_SHUFFLE_ATTEMPTS && !entangled) {
+        placeRandomPositions();
+        entangled = hasIntersection(nodes, edges);
+        shuffleAttempts += 1;
+    }
 
     return {
         id,
