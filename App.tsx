@@ -21,6 +21,7 @@ export default function App() {
     const [isHydrated, setIsHydrated] = useState(false);
 
     const STORAGE_KEY = "untangle_settings_v1";
+    const canContinue = isHydrated && (levelIndex > 0 || totalScore > 0);
 
     // Expo Audio Players (New API) with Pooling
     const playPick = useSoundPool(
@@ -126,16 +127,35 @@ export default function App() {
         }
     };
 
+    const handleContinue = () => {
+        if (!canContinue) return;
+        setIsInMenu(false);
+    };
+
+    const handleNewGame = () => {
+        setLevelIndex(0);
+        setTotalScore(0);
+        setIsInMenu(false);
+    };
+
     if (isInMenu) {
         return (
             <SafeAreaView style={styles.menuContainer}>
                 <Text style={styles.menuTitle}>Untangle</Text>
-                
+
+                <TouchableOpacity 
+                    style={[styles.menuButton, !canContinue && styles.menuButtonDisabled]} 
+                    onPress={handleContinue}
+                    disabled={!canContinue}
+                >
+                    <Text style={styles.menuButtonText}>Continue</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity 
                     style={styles.menuButton} 
-                    onPress={() => setIsInMenu(false)}
+                    onPress={handleNewGame}
                 >
-                    <Text style={styles.menuButtonText}>Start Game</Text>
+                    <Text style={styles.menuButtonText}>New Game</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -220,6 +240,9 @@ const styles = StyleSheet.create({
         elevation: 5,
         minWidth: 200,
         alignItems: "center",
+    },
+    menuButtonDisabled: {
+        opacity: 0.5,
     },
     settingsButton: {
         backgroundColor: "#3498db",
