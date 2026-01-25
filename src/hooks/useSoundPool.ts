@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Audio, AVPlaybackSource } from 'expo-av';
+import { createAudioPlayer } from 'expo-audio';
+
+type AudioSource = Parameters<typeof createAudioPlayer>[0];
+type AudioPlayer = ReturnType<typeof createAudioPlayer>;
 
 export type SoundPoolOptions = {
-    volume?: number;            // 0..1
+    volume?: number;              // 0..1
     rateRange?: [number, number]; // e.g., [0.97, 1.03] for subtle pitch variance
-    autoWarm?: boolean;         // warm up silently on load to reduce first-play latency
+    autoWarm?: boolean;           // warm up silently on load to reduce first-play latency
 };
 
-// Lightweight pooled sound player using expo-av for reliable playback
-export function useSoundPool(source: AVPlaybackSource, debugName?: string, options?: SoundPoolOptions) {
+// Lightweight pooled sound player using expo-audio for reliable playback
+export function useSoundPool(source: AudioSource, debugName?: string, options?: SoundPoolOptions) {
     const pendingPlayRef = useRef(false);
-    const soundsRef = useRef<Audio.Sound[]>([]);
+    const soundsRef = useRef<AudioPlayer[]>([]);
     const indexRef = useRef(0);
     const hasWarmedRef = useRef(false);
 
-    const performPlay = useCallback(async (sound: Audio.Sound) => {
+    const performPlay = useCallback(async (player: AudioPlayer) => {
         const targetVolume = options?.volume ?? 1;
 
         try {
@@ -22,31 +25,36 @@ export function useSoundPool(source: AVPlaybackSource, debugName?: string, optio
                 hasWarmedRef.current = true;
 
                 // First playback on some Android devices is silent. Warm up then immediately replay audibly.
-                await sound.setVolumeAsync(0);
-                await sound.replayAsync();
+                player.volume = 0;
+                await player.seekTo(0);
+                player.play();
 
                 // Give the audio engine a moment to warm up before the first audible replay.
                 await new Promise<void>((resolve) => setTimeout(resolve, 120));
 
+                player.pause();
+
                 if (options?.rateRange) {
                     const [min, max] = options.rateRange;
                     const rate = Math.min(max, Math.max(min, Math.random() * (max - min) + min));
-                    await sound.setRateAsync(rate, true);
+                    player.setPlaybackRate(rate, 'medium');
                 }
 
-                await sound.setVolumeAsync(targetVolume);
-                await sound.replayAsync();
+                player.volume = targetVolume;
+                await player.seekTo(0);
+                player.play();
                 return;
             }
 
             if (options?.rateRange) {
                 const [min, max] = options.rateRange;
                 const rate = Math.min(max, Math.max(min, Math.random() * (max - min) + min));
-                await sound.setRateAsync(rate, true);
+                player.setPlaybackRate(rate, 'medium');
             }
 
-            await sound.setVolumeAsync(targetVolume);
-            await sound.replayAsync();
+            player.volume = targetVolume;
+            await player.seekTo(0);
+            player.play();
         } catch (err) {
             console.warn(`[sound] Failed to play${debugName ? ` (${debugName})` : ''}:`, err);
         }
@@ -61,29 +69,32 @@ export function useSoundPool(source: AVPlaybackSource, debugName?: string, optio
                 const targetVolume = options?.volume ?? 1;
 
                 // Load the first sound immediately so we can play right away.
-                const { sound: firstSound } = await Audio.Sound.createAsync(source, {
-                    shouldPlay: false,
-                    volume: targetVolume,
+                const firstPlayer = createAudioPlayer(source, {
+                    downloadFirst: true,
+                    keepAudioSessionActive: false,
                 });
+                firstPlayer.volume = targetVolume;
 
                 if (!mounted) {
-                    await firstSound.unloadAsync();
+                    firstPlayer.remove();
                     return;
                 }
 
-                soundsRef.current = [firstSound];
+                soundsRef.current = [firstPlayer];
 
                 if (pendingPlayRef.current) {
                     pendingPlayRef.current = false;
-                    await performPlay(firstSound);
+                    await performPlay(firstPlayer);
                 } else if (options?.autoWarm ?? true) {
                     try {
                         if (!hasWarmedRef.current) {
                             hasWarmedRef.current = true;
-                            await firstSound.setVolumeAsync(0);
-                            await firstSound.replayAsync();
+                            firstPlayer.volume = 0;
+                            await firstPlayer.seekTo(0);
+                            firstPlayer.play();
                             await new Promise<void>((resolve) => setTimeout(resolve, 120));
-                            await firstSound.setVolumeAsync(targetVolume);
+                            firstPlayer.pause();
+                            firstPlayer.volume = targetVolume;
                         }
                     } catch (err) {
                         console.warn(`[sound] Failed to warm${debugName ? ` (${debugName})` : ''}:`, err);
@@ -91,21 +102,24 @@ export function useSoundPool(source: AVPlaybackSource, debugName?: string, optio
                 }
 
                 // Load the rest in the background to build the pool.
-                const restPromises: Promise<Audio.Sound>[] = [];
+                const restPromises: Promise<AudioPlayer>[] = [];
                 for (let i = 1; i < poolSize; i += 1) {
                     restPromises.push(
-                        Audio.Sound.createAsync(source, {
-                            shouldPlay: false,
-                            volume: targetVolume,
-                        }).then(({ sound }) => sound)
+                        Promise.resolve(createAudioPlayer(source, {
+                            downloadFirst: true,
+                            keepAudioSessionActive: false,
+                        })).then((player) => {
+                            player.volume = targetVolume;
+                            return player;
+                        })
                     );
                 }
 
                 const rest = await Promise.all(restPromises);
                 if (mounted) {
-                    soundsRef.current = [firstSound, ...rest];
+                    soundsRef.current = [firstPlayer, ...rest];
                 } else {
-                    await Promise.all(rest.map((s) => s.unloadAsync()));
+                    rest.forEach((s) => s.remove());
                 }
             } catch (err) {
                 console.warn(`[sound] Failed to load${debugName ? ` (${debugName})` : ''}:`, err);
@@ -118,9 +132,7 @@ export function useSoundPool(source: AVPlaybackSource, debugName?: string, optio
             mounted = false;
             const sounds = soundsRef.current;
             soundsRef.current = [];
-            sounds.forEach((s) => {
-                s.unloadAsync().catch(() => {});
-            });
+            sounds.forEach((s) => s.remove());
         };
     }, [source, debugName, options?.volume]);
 

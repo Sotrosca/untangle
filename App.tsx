@@ -1,9 +1,10 @@
 import "react-native-gesture-handler";
 import { useState, useEffect, useRef } from "react";
-import { Alert, Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, AppState, AppStateStatus } from "react-native";
+import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View, AppState, AppStateStatus } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { Audio } from 'expo-av';
+import { setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaView } from "react-native-safe-area-context";
 import GraphLevel from "./src/components/GraphLevel";
 import levels from "./src/data/levels.json";
 import { generateLevel, LevelData } from "./src/utils/levelGenerator";
@@ -39,9 +40,11 @@ export default function App() {
     useEffect(() => {
         const configureAudio = async () => {
             try {
-                await Audio.setAudioModeAsync({
-                    playsInSilentModeIOS: true,
-                    staysActiveInBackground: false,
+                await setAudioModeAsync({
+                    playsInSilentMode: true,
+                    shouldPlayInBackground: false,
+                    allowsRecording: false,
+                    shouldRouteThroughEarpiece: false,
                 });
             } catch (err) {
                 console.warn("Audio mode setup failed", err);
