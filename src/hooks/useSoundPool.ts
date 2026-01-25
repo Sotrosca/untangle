@@ -4,6 +4,7 @@ import { Audio, AVPlaybackSource } from 'expo-av';
 export type SoundPoolOptions = {
     volume?: number;            // 0..1
     rateRange?: [number, number]; // e.g., [0.97, 1.03] for subtle pitch variance
+    autoWarm?: boolean;         // warm up silently on load to reduce first-play latency
 };
 
 // Lightweight pooled sound player using expo-av for reliable playback
@@ -75,6 +76,18 @@ export function useSoundPool(source: AVPlaybackSource, debugName?: string, optio
                 if (pendingPlayRef.current) {
                     pendingPlayRef.current = false;
                     await performPlay(firstSound);
+                } else if (options?.autoWarm ?? true) {
+                    try {
+                        if (!hasWarmedRef.current) {
+                            hasWarmedRef.current = true;
+                            await firstSound.setVolumeAsync(0);
+                            await firstSound.replayAsync();
+                            await new Promise<void>((resolve) => setTimeout(resolve, 120));
+                            await firstSound.setVolumeAsync(targetVolume);
+                        }
+                    } catch (err) {
+                        console.warn(`[sound] Failed to warm${debugName ? ` (${debugName})` : ''}:`, err);
+                    }
                 }
 
                 // Load the rest in the background to build the pool.
