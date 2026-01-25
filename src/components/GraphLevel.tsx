@@ -154,9 +154,11 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     const [gameState, setGameState] = useState<{
         nodes: { [key: number]: Point };
         intersectingEdges: Set<number>;
+        intersectionCounts: number[];
     }>({
         nodes: {},
         intersectingEdges: new Set(),
+        intersectionCounts: [],
     });
 
     const [isLevelComplete, setIsLevelComplete] = useState(false);
@@ -237,7 +239,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         const initialIntersections = calculateIntersections(initialNodes, levelData.edges);
         setGameState({
             nodes: initialNodes,
-            intersectingEdges: initialIntersections,
+            intersectingEdges: initialIntersections.intersectingEdges,
+            intersectionCounts: initialIntersections.intersectionCounts,
         });
 
         // Reset Gamification Stats
@@ -261,6 +264,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
 
     const calculateIntersections = (currentNodes: { [key: number]: Point }, edges: any[]) => {
         const intersectionSet = new Set<number>();
+        const intersectionCounts = new Array(edges.length).fill(0);
 
         for (let i = 0; i < edges.length; i++) {
             for (let j = i + 1; j < edges.length; j++) {
@@ -273,12 +277,17 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                 const p4 = currentNodes[edge2.target];
 
                 if (p1 && p2 && p3 && p4 && doIntersect(p1, p2, p3, p4)) {
-                    intersectionSet.add(i);
-                    intersectionSet.add(j);
+                    intersectionCounts[i] += 1;
+                    intersectionCounts[j] += 1;
                 }
             }
         }
-        return intersectionSet;
+
+        for (let i = 0; i < intersectionCounts.length; i++) {
+            if (intersectionCounts[i] > 0) intersectionSet.add(i);
+        }
+
+        return { intersectingEdges: intersectionSet, intersectionCounts };
     };
 
     const handleNodeDrag = useCallback((id: number, dx: number, dy: number) => {
@@ -290,14 +299,73 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                     y: prev.nodes[id].y + dy,
                 },
             };
-            const nextIntersections = calculateIntersections(nextNodes, levelData.edges);
+
+            const affectedEdges: number[] = [];
+            for (let i = 0; i < levelData.edges.length; i++) {
+                const edge = levelData.edges[i];
+                if (edge.source === id || edge.target === id) {
+                    affectedEdges.push(i);
+                }
+            }
+
+            if (affectedEdges.length === 0) {
+                return prev;
+            }
+
+            const nextCounts = prev.intersectionCounts.slice();
+            const affectedSet = new Set(affectedEdges);
+
+            for (const i of affectedEdges) {
+                const edge1 = levelData.edges[i];
+
+                for (let j = 0; j < levelData.edges.length; j++) {
+                    if (i === j) continue;
+                    if (affectedSet.has(j) && j < i) continue;
+                    const edge2 = levelData.edges[j];
+
+                    const prevP1 = prev.nodes[edge1.source];
+                    const prevP2 = prev.nodes[edge1.target];
+                    const prevP3 = prev.nodes[edge2.source];
+                    const prevP4 = prev.nodes[edge2.target];
+
+                    const nextP1 = nextNodes[edge1.source];
+                    const nextP2 = nextNodes[edge1.target];
+                    const nextP3 = nextNodes[edge2.source];
+                    const nextP4 = nextNodes[edge2.target];
+
+                    if (!prevP1 || !prevP2 || !prevP3 || !prevP4 || !nextP1 || !nextP2 || !nextP3 || !nextP4) {
+                        continue;
+                    }
+
+                    const prevIntersect = doIntersect(prevP1, prevP2, prevP3, prevP4);
+                    const nextIntersect = doIntersect(nextP1, nextP2, nextP3, nextP4);
+
+                    if (prevIntersect === nextIntersect) continue;
+
+                    if (prevIntersect) {
+                        nextCounts[i] = Math.max(0, nextCounts[i] - 1);
+                        nextCounts[j] = Math.max(0, nextCounts[j] - 1);
+                    }
+
+                    if (nextIntersect) {
+                        nextCounts[i] += 1;
+                        nextCounts[j] += 1;
+                    }
+                }
+            }
+
+            const nextIntersections = new Set<number>();
+            for (let i = 0; i < nextCounts.length; i++) {
+                if (nextCounts[i] > 0) nextIntersections.add(i);
+            }
 
             return {
                 nodes: nextNodes,
                 intersectingEdges: nextIntersections,
+                intersectionCounts: nextCounts,
             };
         });
-    }, [levelData]);
+    }, [levelData.edges]);
 
     const handleDragStart = useCallback(() => {
         playSound(playPick);
