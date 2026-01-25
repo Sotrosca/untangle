@@ -17,6 +17,9 @@ import * as Haptics from 'expo-haptics';
 import { doIntersect, Point } from "../utils/geometry";
 const NODE_RADIUS = 18; // Slightly smaller visual circle
 const HIT_SLOP = 12;    // Extra invisible touch area for input
+const GRAPH_PADDING = 40;
+const GRAPH_TOP_INSET = 10;
+const GRAPH_BOTTOM_INSET = 80; // leave space for Android nav/buttons
 
 interface NodeProps {
     id: number;
@@ -208,9 +211,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         const dataCenterY = (minY + maxY) / 2;
 
         // 2. Determine available graph space from measured container
-        const PADDING = 40;
-        const availWidth = containerSize.width - (PADDING * 2);
-        const availHeight = containerSize.height - (PADDING * 2);
+        const availWidth = containerSize.width - (GRAPH_PADDING * 2);
+        const availHeight = containerSize.height - (GRAPH_PADDING * 2) - GRAPH_TOP_INSET - GRAPH_BOTTOM_INSET;
 
         // 3. Calculate Scale Factor
         const scaleX = availWidth / dataWidth;
@@ -227,7 +229,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         // Center of the graph container area
         // We add specific vertical offset to push it slightly down from the very top edge
         const screenCenterX = containerSize.width / 2;
-        const screenCenterY = containerSize.height / 2;
+        const screenCenterY = (containerSize.height - GRAPH_BOTTOM_INSET - GRAPH_TOP_INSET) / 2 + GRAPH_TOP_INSET;
 
         levelData.nodes.forEach((node) => {
             initialNodes[node.id] = { 
