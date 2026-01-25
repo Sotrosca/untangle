@@ -168,6 +168,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     const [stars, setStars] = useState(0);
     const [levelScore, setLevelScore] = useState(0);
     const [scoreBreakdown, setScoreBreakdown] = useState<{ baseScore: number; timePenalty: number; movePenalty: number; finalScore: number } | null>(null);
+    const remainingIntersections = gameState.intersectingEdges.size;
 
 
     // Timer
@@ -181,8 +182,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         return () => clearInterval(interval);
     }, [isLevelComplete]);
 
-    // Initialize nodes from level data with auto-scaling and centering once layout is known
-    useEffect(() => {
+    const initializeLevel = useCallback(() => {
         if (!containerSize) return;
 
         const initialNodes: { [key: number]: Point } = {};
@@ -245,7 +245,19 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         setSeconds(0);
         setIsLevelComplete(false);
         setStars(0);
+        setLevelScore(0);
+        setScoreBreakdown(null);
     }, [levelData, containerSize]);
+
+    // Initialize nodes from level data with auto-scaling and centering once layout is known
+    useEffect(() => {
+        initializeLevel();
+    }, [initializeLevel]);
+
+    const handleResetLevel = useCallback(() => {
+        setIsLevelComplete(false);
+        initializeLevel();
+    }, [initializeLevel]);
 
     const calculateIntersections = (currentNodes: { [key: number]: Point }, edges: any[]) => {
         const intersectionSet = new Set<number>();
@@ -379,6 +391,12 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
             <View style={styles.statsContainer}>
                 <Text style={styles.statText}>Moves: {moves}/{levelData.targetMoves ?? (levelData.nodes.length + 1)}</Text>
                 <Text style={styles.statText}>Time: {seconds}s</Text>
+                <Text style={styles.statText}>Intersections: {remainingIntersections}</Text>
+            </View>
+            <View style={styles.controlsRow}>
+                <TouchableOpacity style={styles.resetButton} onPress={handleResetLevel}>
+                    <Text style={styles.resetButtonText}>Reset Level</Text>
+                </TouchableOpacity>
             </View>
             <View
                 style={styles.graphContainer}
@@ -500,6 +518,24 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: "#34495e",
         fontWeight: "600",
+    },
+    controlsRow: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        paddingHorizontal: 20,
+        marginBottom: 8,
+    },
+    resetButton: {
+        backgroundColor: "#e74c3c",
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+        alignItems: "center",
+    },
+    resetButtonText: {
+        color: "white",
+        fontSize: 14,
+        fontWeight: "700",
     },
     graphContainer: {
         flex: 1,
