@@ -21,6 +21,195 @@ const GRAPH_PADDING = 40;
 const GRAPH_TOP_INSET = 10;
 const GRAPH_BOTTOM_INSET = 80; // leave space for Android nav/buttons
 
+export const calculateIntersections = (currentNodes: { [key: number]: Point }, edges: { source: number; target: number }[]) => {
+    const intersectionSet = new Set<number>();
+    const intersectionCounts = new Array(edges.length).fill(0);
+
+    for (let i = 0; i < edges.length; i++) {
+        for (let j = i + 1; j < edges.length; j++) {
+            const edge1 = edges[i];
+            const edge2 = edges[j];
+
+            const p1 = currentNodes[edge1.source];
+            const p2 = currentNodes[edge1.target];
+            const p3 = currentNodes[edge2.source];
+            const p4 = currentNodes[edge2.target];
+
+            if (p1 && p2 && p3 && p4 && doIntersect(p1, p2, p3, p4)) {
+                intersectionCounts[i] += 1;
+                intersectionCounts[j] += 1;
+            }
+        }
+    }
+
+    for (let i = 0; i < intersectionCounts.length; i++) {
+        if (intersectionCounts[i] > 0) intersectionSet.add(i);
+    }
+
+    return { intersectingEdges: intersectionSet, intersectionCounts };
+};
+
+export const buildInitialNodes = (
+    levelNodes: { id: number; x: number; y: number }[],
+    containerSize: { width: number; height: number }
+) => {
+    const initialNodes: { [key: number]: Point } = {};
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    if (levelNodes.length > 0) {
+        levelNodes.forEach((n) => {
+            minX = Math.min(minX, n.x);
+            maxX = Math.max(maxX, n.x);
+            minY = Math.min(minY, n.y);
+            maxY = Math.max(maxY, n.y);
+        });
+    } else {
+        minX = 0; maxX = 100; minY = 0; maxY = 100;
+    }
+
+    const dataWidth = maxX - minX || 1;
+    const dataHeight = maxY - minY || 1;
+    const dataCenterX = (minX + maxX) / 2;
+    const dataCenterY = (minY + maxY) / 2;
+
+    const availWidth = containerSize.width - (GRAPH_PADDING * 2);
+    const availHeight = containerSize.height - (GRAPH_PADDING * 2) - GRAPH_TOP_INSET - GRAPH_BOTTOM_INSET;
+
+    const scaleX = availWidth / dataWidth;
+    const scaleY = availHeight / dataHeight;
+    const safeScaleX = isFinite(scaleX) ? scaleX : 1;
+    const safeScaleY = isFinite(scaleY) ? scaleY : 1;
+    const scale = Math.min(safeScaleX, safeScaleY, 1.6);
+
+    const screenCenterX = containerSize.width / 2;
+    const screenCenterY = (containerSize.height - GRAPH_BOTTOM_INSET - GRAPH_TOP_INSET) / 2 + GRAPH_TOP_INSET;
+
+    levelNodes.forEach((node) => {
+        initialNodes[node.id] = {
+            x: screenCenterX + (node.x - dataCenterX) * scale,
+            y: screenCenterY + (node.y - dataCenterY) * scale
+        };
+    });
+
+    return initialNodes;
+};
+
+export const calculateCompletion = (params: {
+    moves: number;
+    seconds: number;
+    nodeCount: number;
+    targetMoves: number;
+}) => {
+    const { moves, seconds, nodeCount, targetMoves } = params;
+    let calculatedStars = 1;
+
+    if (moves <= nodeCount + 1) calculatedStars = 5;
+    else if (moves <= nodeCount * 1.5) calculatedStars = 4;
+    else if (moves <= nodeCount * 2) calculatedStars = 3;
+    else if (moves <= nodeCount * 3) calculatedStars = 2;
+    else calculatedStars = 1;
+
+    const baseScore = calculatedStars * 200;
+    const timePenalty = Math.floor(seconds / 2);
+    const excessMoves = Math.max(0, moves - targetMoves);
+    const movePenalty = excessMoves * 5;
+    const finalScore = Math.max(50, baseScore - timePenalty - movePenalty);
+
+    return {
+        stars: calculatedStars,
+        levelScore: finalScore,
+        scoreBreakdown: { baseScore, timePenalty, movePenalty, finalScore },
+    };
+};
+
+export const applyDragUpdate = (
+    prev: {
+        nodes: { [key: number]: Point };
+        intersectingEdges: Set<number>;
+        intersectionCounts: number[];
+    },
+    params: {
+        id: number;
+        dx: number;
+        dy: number;
+        edges: { source: number; target: number }[];
+    }
+) => {
+    const { id, dx, dy, edges } = params;
+    const nextNodes = {
+        ...prev.nodes,
+        [id]: {
+            x: prev.nodes[id].x + dx,
+            y: prev.nodes[id].y + dy,
+        },
+    };
+
+    const affectedEdges: number[] = [];
+    for (let i = 0; i < edges.length; i++) {
+        const edge = edges[i];
+        if (edge.source === id || edge.target === id) {
+            affectedEdges.push(i);
+        }
+    }
+
+    if (affectedEdges.length === 0) {
+        return prev;
+    }
+
+    const nextCounts = prev.intersectionCounts.slice();
+    const affectedSet = new Set(affectedEdges);
+
+    for (const i of affectedEdges) {
+        const edge1 = edges[i];
+
+        for (let j = 0; j < edges.length; j++) {
+            if (i === j) continue;
+            if (affectedSet.has(j) && j < i) continue;
+            const edge2 = edges[j];
+
+            const prevP1 = prev.nodes[edge1.source];
+            const prevP2 = prev.nodes[edge1.target];
+            const prevP3 = prev.nodes[edge2.source];
+            const prevP4 = prev.nodes[edge2.target];
+
+            const nextP1 = nextNodes[edge1.source];
+            const nextP2 = nextNodes[edge1.target];
+            const nextP3 = nextNodes[edge2.source];
+            const nextP4 = nextNodes[edge2.target];
+
+            if (!prevP1 || !prevP2 || !prevP3 || !prevP4 || !nextP1 || !nextP2 || !nextP3 || !nextP4) {
+                continue;
+            }
+
+            const prevIntersect = doIntersect(prevP1, prevP2, prevP3, prevP4);
+            const nextIntersect = doIntersect(nextP1, nextP2, nextP3, nextP4);
+
+            if (prevIntersect === nextIntersect) continue;
+
+            if (prevIntersect) {
+                nextCounts[i] = Math.max(0, nextCounts[i] - 1);
+                nextCounts[j] = Math.max(0, nextCounts[j] - 1);
+            }
+
+            if (nextIntersect) {
+                nextCounts[i] += 1;
+                nextCounts[j] += 1;
+            }
+        }
+    }
+
+    const nextIntersections = new Set<number>();
+    for (let i = 0; i < nextCounts.length; i++) {
+        if (nextCounts[i] > 0) nextIntersections.add(i);
+    }
+
+    return {
+        nodes: nextNodes,
+        intersectingEdges: nextIntersections,
+        intersectionCounts: nextCounts,
+    };
+};
+
 interface NodeProps {
     id: number;
     x: number;
@@ -190,54 +379,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
     const initializeLevel = useCallback(() => {
         if (!containerSize) return;
 
-        const initialNodes: { [key: number]: Point } = {};
-
-        // 1. Calculate bounding box of the original data
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        if (levelData.nodes.length > 0) {
-            levelData.nodes.forEach((n) => {
-                minX = Math.min(minX, n.x);
-                maxX = Math.max(maxX, n.x);
-                minY = Math.min(minY, n.y);
-                maxY = Math.max(maxY, n.y);
-            });
-        } else {
-             minX = 0; maxX = 100; minY = 0; maxY = 100;
-        }
-
-        const dataWidth = maxX - minX || 1;
-        const dataHeight = maxY - minY || 1;
-        const dataCenterX = (minX + maxX) / 2;
-        const dataCenterY = (minY + maxY) / 2;
-
-        // 2. Determine available graph space from measured container
-        const availWidth = containerSize.width - (GRAPH_PADDING * 2);
-        const availHeight = containerSize.height - (GRAPH_PADDING * 2) - GRAPH_TOP_INSET - GRAPH_BOTTOM_INSET;
-
-        // 3. Calculate Scale Factor
-        const scaleX = availWidth / dataWidth;
-        const scaleY = availHeight / dataHeight;
-        // Check nan
-        const safeScaleX = isFinite(scaleX) ? scaleX : 1;
-        const safeScaleY = isFinite(scaleY) ? scaleY : 1;
-        
-        // Use the smaller scale to fit both dimensions
-        // Cap at 1.6 to ensure it doesn't look ridiculously large on simple levels
-        const scale = Math.min(safeScaleX, safeScaleY, 1.6); 
-
-        // 4. Center logic
-        // Center of the graph container area
-        // We add specific vertical offset to push it slightly down from the very top edge
-        const screenCenterX = containerSize.width / 2;
-        const screenCenterY = (containerSize.height - GRAPH_BOTTOM_INSET - GRAPH_TOP_INSET) / 2 + GRAPH_TOP_INSET;
-
-        levelData.nodes.forEach((node) => {
-            initialNodes[node.id] = { 
-                x: screenCenterX + (node.x - dataCenterX) * scale,
-                y: screenCenterY + (node.y - dataCenterY) * scale
-            };
-        });
-        
+        const initialNodes = buildInitialNodes(levelData.nodes, containerSize);
         const initialIntersections = calculateIntersections(initialNodes, levelData.edges);
         setGameState({
             nodes: initialNodes,
@@ -264,109 +406,8 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
         initializeLevel();
     }, [initializeLevel]);
 
-    const calculateIntersections = (currentNodes: { [key: number]: Point }, edges: any[]) => {
-        const intersectionSet = new Set<number>();
-        const intersectionCounts = new Array(edges.length).fill(0);
-
-        for (let i = 0; i < edges.length; i++) {
-            for (let j = i + 1; j < edges.length; j++) {
-                const edge1 = edges[i];
-                const edge2 = edges[j];
-
-                const p1 = currentNodes[edge1.source];
-                const p2 = currentNodes[edge1.target];
-                const p3 = currentNodes[edge2.source];
-                const p4 = currentNodes[edge2.target];
-
-                if (p1 && p2 && p3 && p4 && doIntersect(p1, p2, p3, p4)) {
-                    intersectionCounts[i] += 1;
-                    intersectionCounts[j] += 1;
-                }
-            }
-        }
-
-        for (let i = 0; i < intersectionCounts.length; i++) {
-            if (intersectionCounts[i] > 0) intersectionSet.add(i);
-        }
-
-        return { intersectingEdges: intersectionSet, intersectionCounts };
-    };
-
     const handleNodeDrag = useCallback((id: number, dx: number, dy: number) => {
-        setGameState((prev) => {
-            const nextNodes = {
-                ...prev.nodes,
-                [id]: {
-                    x: prev.nodes[id].x + dx,
-                    y: prev.nodes[id].y + dy,
-                },
-            };
-
-            const affectedEdges: number[] = [];
-            for (let i = 0; i < levelData.edges.length; i++) {
-                const edge = levelData.edges[i];
-                if (edge.source === id || edge.target === id) {
-                    affectedEdges.push(i);
-                }
-            }
-
-            if (affectedEdges.length === 0) {
-                return prev;
-            }
-
-            const nextCounts = prev.intersectionCounts.slice();
-            const affectedSet = new Set(affectedEdges);
-
-            for (const i of affectedEdges) {
-                const edge1 = levelData.edges[i];
-
-                for (let j = 0; j < levelData.edges.length; j++) {
-                    if (i === j) continue;
-                    if (affectedSet.has(j) && j < i) continue;
-                    const edge2 = levelData.edges[j];
-
-                    const prevP1 = prev.nodes[edge1.source];
-                    const prevP2 = prev.nodes[edge1.target];
-                    const prevP3 = prev.nodes[edge2.source];
-                    const prevP4 = prev.nodes[edge2.target];
-
-                    const nextP1 = nextNodes[edge1.source];
-                    const nextP2 = nextNodes[edge1.target];
-                    const nextP3 = nextNodes[edge2.source];
-                    const nextP4 = nextNodes[edge2.target];
-
-                    if (!prevP1 || !prevP2 || !prevP3 || !prevP4 || !nextP1 || !nextP2 || !nextP3 || !nextP4) {
-                        continue;
-                    }
-
-                    const prevIntersect = doIntersect(prevP1, prevP2, prevP3, prevP4);
-                    const nextIntersect = doIntersect(nextP1, nextP2, nextP3, nextP4);
-
-                    if (prevIntersect === nextIntersect) continue;
-
-                    if (prevIntersect) {
-                        nextCounts[i] = Math.max(0, nextCounts[i] - 1);
-                        nextCounts[j] = Math.max(0, nextCounts[j] - 1);
-                    }
-
-                    if (nextIntersect) {
-                        nextCounts[i] += 1;
-                        nextCounts[j] += 1;
-                    }
-                }
-            }
-
-            const nextIntersections = new Set<number>();
-            for (let i = 0; i < nextCounts.length; i++) {
-                if (nextCounts[i] > 0) nextIntersections.add(i);
-            }
-
-            return {
-                nodes: nextNodes,
-                intersectingEdges: nextIntersections,
-                intersectionCounts: nextCounts,
-            };
-        });
+        setGameState((prev) => applyDragUpdate(prev, { id, dx, dy, edges: levelData.edges }));
     }, [levelData.edges]);
 
     const handleDragStart = useCallback(() => {
@@ -391,31 +432,21 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
             // Success Haptics (Heavy)
             hapticImpact(Haptics.ImpactFeedbackStyle.Heavy, 120);
             
-            // Calculate Stars based on moves (5 Star System)
             const nodeCount = levelData.nodes.length;
-            let calculatedStars = 1;
-            
-            if (moves <= nodeCount + 1) calculatedStars = 5;       // Perfect + 1 slip
-            else if (moves <= nodeCount * 1.5) calculatedStars = 4; // Great
-            else if (moves <= nodeCount * 2) calculatedStars = 3;   // Good
-            else if (moves <= nodeCount * 3) calculatedStars = 2;   // Okay
-            else calculatedStars = 1;                               // Struggled
-            
-            // Calculate Score based on Stars and Time
-            // Base Score from Stars + Time Efficiency Bonus
-            const baseScore = calculatedStars * 200; 
-            const timePenalty = Math.floor(seconds / 2); // Lose 1 point every 2 seconds
             const targetMoves = levelData.targetMoves ?? (nodeCount + 1);
-            const excessMoves = Math.max(0, moves - targetMoves);
-            const movePenalty = excessMoves * 5; // Lose 5 points per move beyond target
-            const finalScore = Math.max(50, baseScore - timePenalty - movePenalty); // Minimum 50 pts
+            const completion = calculateCompletion({
+                moves,
+                seconds,
+                nodeCount,
+                targetMoves,
+            });
 
-            setStars(calculatedStars);
-            setLevelScore(finalScore);
-            setScoreBreakdown({ baseScore, timePenalty, movePenalty, finalScore });
+            setStars(completion.stars);
+            setLevelScore(completion.levelScore);
+            setScoreBreakdown(completion.scoreBreakdown);
             setIsLevelComplete(true);
         }
-    }, [isDragging, gameState.intersectingEdges, gameState.nodes, hapticImpact, isLevelComplete, levelData.nodes.length, moves, seconds]);
+    }, [isDragging, gameState.intersectingEdges, gameState.nodes, hapticImpact, isLevelComplete, levelData.nodes.length, levelData.targetMoves, moves, seconds]);
 
     const renderEdges = () => {
         const cleanEdges: React.ReactNode[] = [];
@@ -469,6 +500,7 @@ const GraphLevel: React.FC<GraphLevelProps> = ({
                 </TouchableOpacity>
             </View>
             <View
+                testID="graph-container"
                 style={styles.graphContainer}
                 onLayout={(e) => {
                     const { width, height } = e.nativeEvent.layout;

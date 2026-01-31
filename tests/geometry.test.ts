@@ -32,4 +32,12 @@ describe("doIntersect", () => {
     const d = { x: 1, y: 2 };
     expect(doIntersect(a, b, c, d)).toBe(false);
   });
+
+  it("returns false for collinear disjoint segments", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 2, y: 0 };
+    const c = { x: 3, y: 0 };
+    const d = { x: 5, y: 0 };
+    expect(doIntersect(a, b, c, d)).toBe(false);
+  });
 });
