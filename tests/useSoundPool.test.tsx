@@ -7,6 +7,20 @@ type PlayFn = () => Promise<void> | void;
 
 const flushPromises = () => Promise.resolve();
 
+const flushTimersAndPromises = async (ms = 200) => {
+  await act(async () => {
+    await flushPromises();
+  });
+
+  act(() => {
+    jest.advanceTimersByTime(ms);
+  });
+
+  await act(async () => {
+    await flushPromises();
+  });
+};
+
 const TestComponent: React.FC<{
   onReady: (play: PlayFn) => void;
 }> = ({ onReady }) => {
@@ -25,8 +39,12 @@ const TestComponent: React.FC<{
 
 describe("useSoundPool", () => {
   beforeEach(() => {
-    jest.useRealTimers();
+    jest.useFakeTimers();
     (createAudioPlayer as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("creates an audio player and plays on demand", async () => {
@@ -34,17 +52,16 @@ describe("useSoundPool", () => {
 
     render(<TestComponent onReady={(fn) => (playFn = fn)} />);
 
-    await act(async () => {
-      await flushPromises();
-    });
+    await flushTimersAndPromises();
 
     expect(createAudioPlayer).toHaveBeenCalledTimes(1);
     const player = (createAudioPlayer as jest.Mock).mock.results[0].value;
 
-    await act(async () => {
-      await playFn();
-      await flushPromises();
+    act(() => {
+      void playFn();
     });
+
+    await flushTimersAndPromises(250);
 
     expect(player.seekTo).toHaveBeenCalled();
     expect(player.play).toHaveBeenCalled();
@@ -55,17 +72,17 @@ describe("useSoundPool", () => {
 
     render(<TestComponent onReady={(fn) => (playFn = fn)} />);
 
-    await act(async () => {
-      await playFn();
-      await flushPromises();
+    act(() => {
+      void playFn();
     });
+
+    await flushTimersAndPromises(250);
 
     const player = (createAudioPlayer as jest.Mock).mock.results[0].value;
     expect(player.play).toHaveBeenCalled();
   });
 
   it("auto-warms on load when enabled", async () => {
-    jest.useFakeTimers();
     const AutoWarmComponent: React.FC = () => {
       useSoundPool({ uri: "test" } as any, "AUTO", { autoWarm: true });
       return null;
@@ -73,22 +90,11 @@ describe("useSoundPool", () => {
 
     render(<AutoWarmComponent />);
 
-    await act(async () => {
-      await flushPromises();
-    });
-
-    act(() => {
-      jest.runAllTimers();
-    });
-
-    await act(async () => {
-      await flushPromises();
-    });
+    await flushTimersAndPromises(300);
 
     const player = (createAudioPlayer as jest.Mock).mock.results[0].value;
     expect(player.play).toHaveBeenCalled();
     expect(player.pause).toHaveBeenCalled();
-    jest.useRealTimers();
   });
 
   it("applies playback rate variance after warm", async () => {
@@ -96,17 +102,16 @@ describe("useSoundPool", () => {
 
     render(<TestComponent onReady={(fn) => (playFn = fn)} />);
 
-    await act(async () => {
-      await flushPromises();
-    });
+    await flushTimersAndPromises();
 
     const player = (createAudioPlayer as jest.Mock).mock.results[0].value;
 
-    await act(async () => {
-      await playFn();
-      await playFn();
-      await flushPromises();
+    act(() => {
+      void playFn();
+      void playFn();
     });
+
+    await flushTimersAndPromises(250);
 
     expect(player.setPlaybackRate).toHaveBeenCalled();
   });
@@ -124,9 +129,7 @@ describe("useSoundPool", () => {
 
     render(<ErrorComponent />);
 
-    await act(async () => {
-      await flushPromises();
-    });
+    await flushTimersAndPromises();
 
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();

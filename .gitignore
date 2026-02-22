@@ -8,3 +8,4 @@ android/
 .expo/
 /tools
 coverage/
+.vscode/
